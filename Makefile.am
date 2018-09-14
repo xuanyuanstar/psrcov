@@ -21,6 +21,6 @@ set_coor_LDADD = libVDIF.la @CFITSIO_LIBS@
 UDP2dada_SOURCES = UDP2dada.c
 UDP2dada_LDADD = 
 
-AM_CPPFLAGS = -DPSRFITS_TEMPLATE_DIR='"/home/kliu/Soft/psrcov/"'
+AM_CPPFLAGS = -DPSRFITS_TEMPLATE_DIR='"/beegfsBN/miraculix2/part0/src/psrcov/"'
 
 ACLOCAL_AMFLAGS = -I config

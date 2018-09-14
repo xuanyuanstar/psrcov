@@ -489,9 +489,9 @@ int main(int argc, char *argv[])
   // Param. for power dip patching
   if(pch == 1)
 	{
-	  pha_start_nf = lround(pha_start * (len_scan + len_dip) / pf.hdr.dt);
-	  len_scan_nf = len_scan / pf.hdr.dt;
-	  len_dip_nf = len_dip / pf.hdr.dt;
+	  pha_start_nf = lround(pha_start * (len_scan + len_dip) / (pf.hdr.dt/tsf) );
+	  len_scan_nf = len_scan / (pf.hdr.dt/tsf);
+	  len_dip_nf = len_dip / (pf.hdr.dt/tsf);
 	  for(i=0;i<2;i++)
 		for(j=0;j<VDIF_NCHAN;j++)
 		  {
@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
 			  
 			  // Break at the end of vdif file
 			  if(feof (vdif[0]) || feof (vdif[1])) break;
-			}		  
+			}	  
 		  // Break when not enough frames to get a sample
 		  if(k!=tsf) break;
 		  

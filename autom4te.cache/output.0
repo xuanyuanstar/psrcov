@@ -635,6 +635,15 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIB@&t@OBJS
+HAVE_CFITSIO_FALSE
+HAVE_CFITSIO_TRUE
+CFITSIO_CFLAGS
+CFITSIO_LIBS
+SOCKET_LIBS
+HAVE_FFTW3_FALSE
+HAVE_FFTW3_TRUE
+FFTW_CFLAGS
+FFTW_LIBS
 CXXCPP
 CPP
 OTOOL64
@@ -772,6 +781,12 @@ enable_fast_install
 with_gnu_ld
 with_sysroot
 enable_libtool_lock
+with_fftw3_dir
+with_fftw3_include_dir
+with_fftw3_lib_dir
+with_cfitsio_dir
+with_cfitsio_include_dir
+with_cfitsio_lib_dir
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1428,6 +1443,16 @@ Optional Packages:
   --with-gnu-ld           assume the C compiler uses GNU ld @<:@default=no@:>@
   --with-sysroot=DIR Search for dependent libraries within DIR
                         (or the compiler's sysroot if not specified).
+  --with-fftw3-dir=DIR    @<:@fftw3@:>@ is in DIR
+  --with-fftw3-include-dir=DIR 
+                          @<:@fftw3@:>@ header files are in DIR
+  --with-fftw3-lib-dir=DIR 
+                          @<:@fftw3@:>@ library is in DIR
+  --with-cfitsio-dir=DIR  @<:@cfitsio@:>@ is in DIR
+  --with-cfitsio-include-dir=DIR 
+                          @<:@cfitsio@:>@ header files are in DIR
+  --with-cfitsio-lib-dir=DIR 
+                          @<:@cfitsio@:>@ library is in DIR
 
 Some influential environment variables:
   CC          C compiler command
@@ -4248,6 +4273,7 @@ unknown)
   ;;
 esac
 
+#m4_ifdef([AM_PROG_AR],[AM_PROG_AR])
 
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -22281,8 +22307,619 @@ fi
 
 
 # Checks for essential libraries
-SWIN_LIB_FFTW
-SWIN_LIB_CFITSIO
+
+  
+
+  
+  
+
+  
+@%:@ Check whether --with-fftw3-dir was given.
+if test "${with_fftw3_dir+set}" = set; then :
+  withval=$with_fftw3_dir; 
+fi
+
+
+  
+@%:@ Check whether --with-fftw3-include-dir was given.
+if test "${with_fftw3_include_dir+set}" = set; then :
+  withval=$with_fftw3_include_dir; 
+fi
+
+
+  
+@%:@ Check whether --with-fftw3-lib-dir was given.
+if test "${with_fftw3_lib_dir+set}" = set; then :
+  withval=$with_fftw3_lib_dir; 
+fi
+
+
+  if test x"$with_fftw3_dir" = x"no" ||
+     test x"$with_fftw3_include-dir" = x"no" ||
+     test x"$with_fftw3_lib_dir" = x"no"; then
+
+    # user disabled [fftw3]. Leave cache alone.
+    have_fftw3="user disabled"
+
+  else
+
+    # "yes" is not a specification
+    if test x"$with_fftw3_dir" = xyes; then
+      with_fftw3_dir=""
+    fi
+
+    if test x"$with_fftw3_include_dir" = xyes; then
+      with_fftw3_include_dir=""
+    fi
+
+    if test x"$with_fftw3_lib_dir" = xyes; then
+      with_fftw3_lib_dir=""
+    fi
+
+    # _include_dir and _lib_dir take precedence over _dir:
+    if test x"$with_fftw3_include_dir" = x &&
+       test x"$with_fftw3_dir" != x; then
+      with_fftw3_include_dir=$with_fftw3_dir/include
+    fi
+    if test x"$with_fftw3_lib_dir" = x &&
+       test x"$with_fftw3_dir" != x; then
+      with_fftw3_lib_dir=$with_fftw3_dir/lib
+    fi
+
+  fi
+
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for single-precision FFTW-3 library" >&5
+$as_echo_n "checking for single-precision FFTW-3 library... " >&6; }
+
+  if test "$have_fftw" != "user disabled"; then
+
+    
+  
+
+  TEST_INCS=`echo $CPPFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-I' | sed -e 's/-I//g'`
+  TEST_LIBS=`echo $LDFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-L' | sed -e 's/-L//g'`
+  TEST_PACKAGES=`echo $TEST_INCS $TEST_LIBS $LD_LIBRARY_PATH $PACKAGES | sed -e 's/:/ /g'`
+
+  if ${swin_cv_fftw3_found+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_fftw3_found=""
+  if test x"$TEST_PACKAGES" != x; then
+    for cf_file in `find -L $TEST_PACKAGES -name "fftw3.h" 2> /dev/null`; do
+      cf_path=`dirname $cf_file`
+      swin_cv_fftw3_found="$swin_cv_fftw3_found $cf_path"
+    done
+  fi
+fi
+
+
+    
+  
+
+  cf_include_path_list="$with_fftw3_include_dir $swin_cv_fftw3_found  ."
+
+  ac_save_CFLAGS="$CFLAGS"
+
+  if ${swin_cv_fftw3_include_dir+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_fftw3_include_dir=""
+  for cf_dir in $cf_include_path_list; do
+    CFLAGS="-I$cf_dir $ac_save_CFLAGS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <fftw3.h>
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  have_fftw3=yes
+else
+  have_fftw3=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    if test $have_fftw3 = yes; then
+      swin_cv_fftw3_include_dir="$cf_dir"
+      break
+    fi
+  done
+fi
+
+
+  if test x"$swin_cv_fftw3_include_dir" != x; then
+    have_fftw3=yes
+    if test x"$swin_cv_fftw3_include_dir" != x.; then
+      fftw3_CFLAGS="-I$swin_cv_fftw3_include_dir"
+    else
+      fftw3_CFLAGS=""
+      swin_cv_fftw3_include_dir=""
+    fi
+  fi
+  CFLAGS="$ac_save_CFLAGS"
+
+
+    if test $have_fftw3 = yes; then
+      
+  
+
+  TEST_INCS=`echo $CPPFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-I' | sed -e 's/-I//g'`
+  TEST_LIBS=`echo $LDFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-L' | sed -e 's/-L//g'`
+  TEST_PACKAGES=`echo $TEST_INCS $TEST_LIBS $LD_LIBRARY_PATH $PACKAGES | sed -e 's/:/ /g'`
+
+  if ${swin_cv_fftw3_found+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_fftw3_found=""
+  if test x"$TEST_PACKAGES" != x; then
+    for cf_file in `find -L $TEST_PACKAGES -name "libfftw3f.*" 2> /dev/null`; do
+      cf_path=`dirname $cf_file`
+      swin_cv_fftw3_found="$swin_cv_fftw3_found $cf_path"
+    done
+  fi
+fi
+
+
+      
+  
+
+  swin_search_path="$swin_cv_fftw3_found"
+
+  #
+  # If a path/include/ directory is found, then add path/lib/ to the search
+  #
+  if test x"$swin_cv_fftw3_include_dir" != x; then
+    swin_base=`dirname $swin_cv_fftw3_include_dir`
+    if test x"$swin_base" != x. -a -d $swin_base/lib; then
+      swin_search_path="$swin_search_path $swin_base/lib"
+    fi
+  fi
+
+  cf_lib_path_list="$with_fftw3_lib_dir $swin_search_path  ."
+
+  ac_save_CFLAGS="$CFLAGS"
+  CFLAGS="$fftw3_CFLAGS $ac_save_CFLAGS"
+
+  ac_save_LIBS="$LIBS"
+
+  for cf_dir in $cf_lib_path_list; do
+    LIBS="-L$cf_dir -lfftw3f $ac_save_LIBS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <fftw3.h>
+int
+main ()
+{
+fftwf_plan_dft_1d(0,0,0,FFTW_FORWARD,FFTW_ESTIMATE);
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  have_fftw3=yes
+else
+  have_fftw3=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    if test $have_fftw3 = yes; then
+      if test x"$cf_dir" = x.; then
+        fftw3_LIBS="-lfftw3f"
+      else
+        fftw3_LIBS="-L$cf_dir -lfftw3f"
+      fi
+      break
+    fi
+  done
+
+  CFLAGS="$ac_save_CFLAGS"
+  LIBS="$ac_save_LIBS"
+
+
+    fi
+
+  else
+    have_fftw3=no
+  fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $have_fftw3" >&5
+$as_echo "$have_fftw3" >&6; }
+
+  if test $have_fftw3 = yes; then
+    
+$as_echo "@%:@define HAVE_FFTW3 1" >>confdefs.h
+
+    FFTW_LIBS="$fftw3_LIBS $FFTW_LIBS"
+    FFTW_CFLAGS="$fftw3_CFLAGS $FFTW_CFLAGS"
+  fi
+
+  
+  
+
+   if test "$have_fftw3" = yes; then
+  HAVE_FFTW3_TRUE=
+  HAVE_FFTW3_FALSE='#'
+else
+  HAVE_FFTW3_TRUE='#'
+  HAVE_FFTW3_FALSE=
+fi
+
+
+
+
+  
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libraries containing socket functions" >&5
+$as_echo_n "checking for libraries containing socket functions... " >&6; }
+if ${ac_cv_socket_libs+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  
+        oCFLAGS=$CFLAGS
+
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+                        #include <sys/types.h>
+                        #include <sys/socket.h>
+                        #include <netinet/in.h>
+                        #include <arpa/inet.h>
+                
+int
+main ()
+{
+
+                        struct in_addr add;
+                        int sd = socket(AF_INET, SOCK_STREAM, 0);
+                        inet_ntoa(add);
+                
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_socket_libs=-lc
+else
+  ac_cv_socket_libs=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+
+        if test x"$ac_cv_socket_libs" = "xno"
+        then
+                CFLAGS="$oCFLAGS -lsocket"
+                cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+                                #include <sys/types.h>
+                                #include <sys/socket.h>
+                                #include <netinet/in.h>
+                                #include <arpa/inet.h>
+                        
+int
+main ()
+{
+
+                                struct in_addr add;
+                                int sd = socket(AF_INET, SOCK_STREAM, 0);
+                                inet_ntoa(add);
+                        
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_socket_libs=-lsocket
+else
+  ac_cv_socket_libs=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+        fi
+
+        if test x"$ac_cv_socket_libs" = "xno"
+        then
+                CFLAGS="$oCFLAGS -lsocket -lnsl"
+                cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+                                #include <sys/types.h>
+                                #include <sys/socket.h>
+                                #include <netinet/in.h>
+                                #include <arpa/inet.h>
+                        
+int
+main ()
+{
+
+                                struct in_addr add;
+                                int sd = socket(AF_INET, SOCK_STREAM, 0);
+                                inet_ntoa(add);
+                        
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_socket_libs="-lsocket -lnsl"
+else
+  ac_cv_socket_libs=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+        fi
+
+        CFLAGS=$oCFLAGS
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_socket_libs" >&5
+$as_echo "$ac_cv_socket_libs" >&6; }
+
+        if test x"$ac_cv_socket_libs" = "xno"
+        then
+                { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Cannot find socket libraries" >&5
+$as_echo "$as_me: WARNING: Cannot find socket libraries" >&2;}
+        elif test x"$ac_cv_socket_libs" = "x-lc"
+        then
+                SOCKET_LIBS=""
+        else
+                SOCKET_LIBS="$ac_cv_socket_libs"
+        fi
+
+        
+
+
+  
+  
+
+  
+  
+
+  
+@%:@ Check whether --with-cfitsio-dir was given.
+if test "${with_cfitsio_dir+set}" = set; then :
+  withval=$with_cfitsio_dir; 
+fi
+
+
+  
+@%:@ Check whether --with-cfitsio-include-dir was given.
+if test "${with_cfitsio_include_dir+set}" = set; then :
+  withval=$with_cfitsio_include_dir; 
+fi
+
+
+  
+@%:@ Check whether --with-cfitsio-lib-dir was given.
+if test "${with_cfitsio_lib_dir+set}" = set; then :
+  withval=$with_cfitsio_lib_dir; 
+fi
+
+
+  if test x"$with_cfitsio_dir" = x"no" ||
+     test x"$with_cfitsio_include-dir" = x"no" ||
+     test x"$with_cfitsio_lib_dir" = x"no"; then
+
+    # user disabled [cfitsio]. Leave cache alone.
+    have_cfitsio="user disabled"
+
+  else
+
+    # "yes" is not a specification
+    if test x"$with_cfitsio_dir" = xyes; then
+      with_cfitsio_dir=""
+    fi
+
+    if test x"$with_cfitsio_include_dir" = xyes; then
+      with_cfitsio_include_dir=""
+    fi
+
+    if test x"$with_cfitsio_lib_dir" = xyes; then
+      with_cfitsio_lib_dir=""
+    fi
+
+    # _include_dir and _lib_dir take precedence over _dir:
+    if test x"$with_cfitsio_include_dir" = x &&
+       test x"$with_cfitsio_dir" != x; then
+      with_cfitsio_include_dir=$with_cfitsio_dir/include
+    fi
+    if test x"$with_cfitsio_lib_dir" = x &&
+       test x"$with_cfitsio_dir" != x; then
+      with_cfitsio_lib_dir=$with_cfitsio_dir/lib
+    fi
+
+  fi
+
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for CFITSIO installation" >&5
+$as_echo_n "checking for CFITSIO installation... " >&6; }
+
+  if test "$have_cfitsio" != "user disabled"; then
+
+    
+  
+
+  TEST_INCS=`echo $CPPFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-I' | sed -e 's/-I//g'`
+  TEST_LIBS=`echo $LDFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-L' | sed -e 's/-L//g'`
+  TEST_PACKAGES=`echo $TEST_INCS $TEST_LIBS $LD_LIBRARY_PATH $PACKAGES | sed -e 's/:/ /g'`
+
+  if ${swin_cv_cfitsio_found+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_cfitsio_found=""
+  if test x"$TEST_PACKAGES" != x; then
+    for cf_file in `find -L $TEST_PACKAGES -name "fitsio.h" 2> /dev/null`; do
+      cf_path=`dirname $cf_file`
+      swin_cv_cfitsio_found="$swin_cv_cfitsio_found $cf_path"
+    done
+  fi
+fi
+
+
+    
+  
+
+  cf_include_path_list="$with_cfitsio_include_dir $swin_cv_cfitsio_found  ."
+
+  ac_save_CFLAGS="$CFLAGS"
+
+  if ${swin_cv_cfitsio_include_dir+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_cfitsio_include_dir=""
+  for cf_dir in $cf_include_path_list; do
+    CFLAGS="-I$cf_dir $ac_save_CFLAGS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <fitsio.h>
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  have_cfitsio=yes
+else
+  have_cfitsio=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    if test $have_cfitsio = yes; then
+      swin_cv_cfitsio_include_dir="$cf_dir"
+      break
+    fi
+  done
+fi
+
+
+  if test x"$swin_cv_cfitsio_include_dir" != x; then
+    have_cfitsio=yes
+    if test x"$swin_cv_cfitsio_include_dir" != x.; then
+      cfitsio_CFLAGS="-I$swin_cv_cfitsio_include_dir"
+    else
+      cfitsio_CFLAGS=""
+      swin_cv_cfitsio_include_dir=""
+    fi
+  fi
+  CFLAGS="$ac_save_CFLAGS"
+
+
+    
+  
+
+  TEST_INCS=`echo $CPPFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-I' | sed -e 's/-I//g'`
+  TEST_LIBS=`echo $LDFLAGS | awk '{ for (i=1; i<=NF; i++) printf ("%s\n", $i);}' | grep '^-L' | sed -e 's/-L//g'`
+  TEST_PACKAGES=`echo $TEST_INCS $TEST_LIBS $LD_LIBRARY_PATH $PACKAGES | sed -e 's/:/ /g'`
+
+  if ${swin_cv_cfitsio_found+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  swin_cv_cfitsio_found=""
+  if test x"$TEST_PACKAGES" != x; then
+    for cf_file in `find -L $TEST_PACKAGES -name "libcfitsio.*" 2> /dev/null`; do
+      cf_path=`dirname $cf_file`
+      swin_cv_cfitsio_found="$swin_cv_cfitsio_found $cf_path"
+    done
+  fi
+fi
+
+
+    
+  
+
+  swin_search_path="$swin_cv_cfitsio_found"
+
+  #
+  # If a path/include/ directory is found, then add path/lib/ to the search
+  #
+  if test x"$swin_cv_cfitsio_include_dir" != x; then
+    swin_base=`dirname $swin_cv_cfitsio_include_dir`
+    if test x"$swin_base" != x. -a -d $swin_base/lib; then
+      swin_search_path="$swin_search_path $swin_base/lib"
+    fi
+  fi
+
+  cf_lib_path_list="$with_cfitsio_lib_dir $swin_search_path  ."
+
+  ac_save_CFLAGS="$CFLAGS"
+  CFLAGS="$cfitsio_CFLAGS $ac_save_CFLAGS"
+
+  ac_save_LIBS="$LIBS"
+
+  for cf_dir in $cf_lib_path_list; do
+    LIBS="-L$cf_dir -lcfitsio -lpthread -lm $SOCKET_LIBS $ac_save_LIBS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <fitsio.h>
+int
+main ()
+{
+fits_movnam_hdu(0,0,0,0,0);
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  have_cfitsio=yes
+else
+  have_cfitsio=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    if test $have_cfitsio = yes; then
+      if test x"$cf_dir" = x.; then
+        cfitsio_LIBS="-lcfitsio -lpthread -lm $SOCKET_LIBS"
+      else
+        cfitsio_LIBS="-L$cf_dir -lcfitsio -lpthread -lm $SOCKET_LIBS"
+      fi
+      break
+    fi
+  done
+
+  CFLAGS="$ac_save_CFLAGS"
+  LIBS="$ac_save_LIBS"
+
+
+
+  fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $have_cfitsio" >&5
+$as_echo "$have_cfitsio" >&6; }
+
+  if test $have_cfitsio = yes; then
+    
+$as_echo "@%:@define HAVE_CFITSIO 1" >>confdefs.h
+
+    
+  else
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: The PSRFITS code will not be compiled" >&5
+$as_echo "$as_me: WARNING: The PSRFITS code will not be compiled" >&2;}
+    
+  fi
+
+  CFITSIO_LIBS="$cfitsio_LIBS"
+  CFITSIO_CFLAGS="$cfitsio_CFLAGS"
+
+  
+  
+   if test $have_cfitsio = yes; then
+  HAVE_CFITSIO_TRUE=
+  HAVE_CFITSIO_FALSE='#'
+else
+  HAVE_CFITSIO_TRUE='#'
+  HAVE_CFITSIO_FALSE=
+fi
+
+
+
 
 ac_config_headers="$ac_config_headers config.h"
 
@@ -22427,6 +23064,14 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCXX_TRUE}" && test -z "${am__fastdepCXX_FALSE}"; then
   as_fn_error $? "conditional \"am__fastdepCXX\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_FFTW3_TRUE}" && test -z "${HAVE_FFTW3_FALSE}"; then
+  as_fn_error $? "conditional \"HAVE_FFTW3\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_CFITSIO_TRUE}" && test -z "${HAVE_CFITSIO_FALSE}"; then
+  as_fn_error $? "conditional \"HAVE_CFITSIO\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 
