@@ -18,6 +18,7 @@
 #include "psrfits.h"
 #include "vdif2psrfits.h"
 #include "dec2hms.h"
+#include "ran.c"
 
 static double VDIF_BW = 2000.0; //Total Bandwidth in MHz
 static int VDIF_BIT = 2;   //Bit per sample
@@ -37,12 +38,13 @@ void usage(char *prg_name)
           "  -S      Name of the source (by default J0000+0000)\n"
 		  "  -r      RA of the source\n"
 		  "  -c      Dec of the source\n"
-		  "  -D      Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, by default C)\n"
+		  "  -D      Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, S for Stokes, P for polarised signal, by default C)\n"
 		  "  -O      Route of the output file(s).\n"
 		  "  -h      Available options\n"
 		  "\n"
 		  "Patching power dip options:\n"
-		  "  -P               Enable replacement of power dip with mean \n"
+		  "  -P               Replace power dip raw samples with random noise \n"
+		  "  -M               Replace power dip detections with mean \n"
 		  "  -p               Starting phase of data in scan+dip cycle (by default 0)\n",
 		  prg_name);
   exit(0);
@@ -56,11 +58,11 @@ int main(int argc, char *argv[])
   struct psrfits pf;
   
   char vname[2][1024], oroute[1024], ut[30],mjd_str[25],vfhdr[2][VDIF_HEADER_BYTES],srcname[16],dstat,ra[64],dec[64];
-  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,p,nfps,fbytes,vd[2],nf_stat,ftot[2][2][VDIF_NCHAN],ct,tsf,bs,tet,nf_skip,dati,npol,pch,mean_sampl;
+  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,p,nfps,fbytes,vd[2],nf_stat,ftot[2][2][VDIF_NCHAN],ct,tsf,bs,tet,nf_skip,dati,npol,pch,mean_sampl,mch;
   float freq,s_stat,dat,s_skip;
-  double spf,mean[2][VDIF_NCHAN],sq[2][VDIF_NCHAN],rms[2][VDIF_NCHAN],pha_start,len_scan,len_dip,mean_scan[2][VDIF_NCHAN],fmean[2][VDIF_NCHAN],frms[2][VDIF_NCHAN],rms_scan[2][VDIF_NCHAN],mean_pre[2],fsq[2][VDIF_NCHAN],thrd0[2][VDIF_NCHAN],thrd1[2][VDIF_NCHAN],thrd2[2][VDIF_NCHAN];
+  double spf,pha_start,len_scan,len_dip,mean_det[VDIF_NCHAN][4],acc_det[VDIF_NCHAN][4],rms_det[VDIF_NCHAN][4],accsq_det[VDIF_NCHAN][4];
   long double mjd;
-  long int idx[2],sec[2],num[2],seed,pha_start_nf,len_scan_nf,len_dip_nf,pha_ct,stat[2][VDIF_NCHAN][4];
+  long int idx[2],sec[2],num[2],seed,iseed,pha_start_nf,len_scan_nf,len_dip_nf,pha_ct,fct;
   unsigned char *buffer[2], *obuffer[2];
   float det[VDIF_NCHAN][4],sdet[VDIF_NCHAN][4];
   time_t t;
@@ -76,6 +78,7 @@ int main(int argc, char *argv[])
   dstat='C';
   npol=4;
   pch=0;
+  mch=0;
   pha_start=0.0;
   len_scan=16.128;
   len_dip=2.064;
@@ -88,7 +91,7 @@ int main(int argc, char *argv[])
     }
   
   // Read arguments
-  while ((arg=getopt(argc,argv,"hf:i:j:s:n:k:t:O:S:D:r:c:dPp:")) != -1)
+  while ((arg=getopt(argc,argv,"hf:i:j:s:n:k:t:O:S:D:r:c:dPp:M")) != -1)
 	{
 	  switch(arg)
 		{
@@ -136,13 +139,22 @@ int main(int argc, char *argv[])
 		  
 		case 'D':
 		  strcpy(&dstat,optarg);
-		  if(dstat!='C') npol=1;
+		  if(dstat=='C' || dstat=='S')
+			npol=4;
+		  else if(dstat=='P')
+			npol=2;
+		  else
+			npol=1;
 		  break;
 		  
 		case 'P':
 		  pch=1;
 		  break;
 
+		case 'M':
+		  mch=1;
+		  break;
+		  
 		case 'p':
 		  pha_start=atof(optarg);
 		  break;
@@ -199,15 +211,22 @@ int main(int argc, char *argv[])
 	  exit(0);
 	}
 
-  if(dstat!='I' && dstat!='C' && dstat!='X' && dstat!='Y')
+  if(dstat!='I' && dstat!='C' && dstat!='X' && dstat!='Y' && dstat!='S' && dstat!='P')
 	{
 	  fprintf(stderr,"Not recognized status for output data.\n");
 	  exit(0);
 	}
-
+  
+  if(mch==1 && pch==1)
+	{
+	  fprintf(stderr,"Incompatible patching options.\n");
+	  exit(0);
+	}
+  
   // Get seed for random generator
-  srand((unsigned)time(&t));
-  seed=0-t;
+  time(&t);
+  iseed=0-t;
+  seed=iseed;
   
   // Read the first header of vdif pol0
   vdif[0]=fopen(vname[0],"rb");
@@ -238,77 +257,73 @@ int main(int argc, char *argv[])
 	}
   
   // Scan the beginning specified length of data, choose valid frames to get mean of total value in each frame
-  fprintf(stderr,"Scan %.2f s data to get statistics, after skipping the first %.2f data...\n",s_stat,s_skip); 
+  fprintf(stderr,"Scan %.2f s data to get statistics, after skipping the first %.2f data...\n",s_stat,s_skip);
+  for(j=0;j<4;j++)
+	for(k=0;k<VDIF_NCHAN;k++)
+	  {
+		acc_det[k][j]=0.0;
+		accsq_det[k][j]=0.0;
+	  }
+  fct=0;	  
   for(j=0;j<2;j++)
 	{
-	  for(k=0;k<VDIF_NCHAN;k++)
-		{
-		  mean[j][k]=0.0;
-		  sq[j][k]=0.0;
-		  rms[j][k]=0.0;
-		}
-	  ct=0;
-
 	  vdif[j]=fopen(vname[j],"rb");
-	  
+
 	  // Skip the first given length of data
 	  for(i=0;i<nf_skip;i++)
 		fseek(vdif[j],VDIF_HEADER_BYTES+fbytes,SEEK_CUR);
-
-      for(i=0;i<nf_stat;i++)
+	}
+  for(i=0;i<nf_stat;i++)
+	{
+	  // Read header
+	  fread(vfhdr[0],1,VDIF_HEADER_BYTES,vdif[0]);
+	  fread(vfhdr[1],1,VDIF_HEADER_BYTES,vdif[1]);
+	  header[0]=(const vdif_header *)vfhdr[0];
+	  header[1]=(const vdif_header *)vfhdr[1];
+		  
+	  // Valid frame
+	  if(!getVDIFFrameInvalid(header[0]) && !getVDIFFrameInvalid(header[1]))
 		{
-		  // Read header
-		  fread(vfhdr[j],1,VDIF_HEADER_BYTES,vdif[j]);
-		  header[j]=(const vdif_header *)vfhdr[j];
-
-		  // Valid frame
-		  if(!getVDIFFrameInvalid(header[j]))
-			{
-			  // Read data in frame
-			  fread(buffer[j],1,fbytes,vdif[j]);
-
-			  // Expand from 2-bit to 8-bit
-			  convert2to8(obuffer[j], buffer[j],fbytes);
-
-			  // Accumulate values for each channel
-			  for(k=0;k<VDIF_NCHAN;k++)
-				{
-				  // Read time series
-				  for(p=0;p<fbytes*4/VDIF_NCHAN;p++)
-					{
-					  if(k<VDIF_NCHAN/2)
-						dati=(int)obuffer[j][p*VDIF_NCHAN+15-k];
-					  else
-						dati=(int)obuffer[j][p*VDIF_NCHAN+15+VDIF_NCHAN-k];
-
-					  mean[j][k]+=(double)dati;
-					  sq[j][k]+=pow((double)dati,2.0);
-					}
-				}
-			  // Add counter
-			  ct++;
-			}
-		  // Invalid frame
-		  else
-			{
-			  // Skip the data
-			  fseek(vdif[j],fbytes,SEEK_CUR);
-			}
+		  // Read data in frame
+		  fread(buffer[0],1,fbytes,vdif[0]);
+		  fread(buffer[1],1,fbytes,vdif[1]);
+		  
+		  // Accumulate values for detection mean
+		  getVDIFFrameDetection_32chan(buffer[0],buffer[1],fbytes,det,dstat);
+		  for(j=0;j<VDIF_NCHAN;j++)
+			for(p=0;p<4;p++)
+			  {
+				acc_det[j][p]+=(double)det[j][p];
+				accsq_det[j][p]+=pow((double)det[j][p],2.0);
+			  }
+		  fct++;
 		}
-	  fclose(vdif[j]);
-
-	  // Stat for each channel
-	  for(k=0;k<VDIF_NCHAN;k++)
+	  // Invalid frame
+	  else
 		{
-		  mean[j][k]=mean[j][k]/ct/(fbytes*4/VDIF_NCHAN);
-		  rms[j][k]=sqrt(sq[j][k]/ct/(fbytes*4/VDIF_NCHAN)-pow(mean[j][k],2.0));
-		  printf("Pol%i, chan%i: mean %lf, rms %lf.\n",j,k,mean[j][k],rms[j][k]);
+		  fseek(vdif[0],fbytes,SEEK_CUR);
+		  fseek(vdif[1],fbytes,SEEK_CUR);
 		}
 	}
+  fclose(vdif[0]);
+  fclose(vdif[1]);
 
-  // Open VDIF files for data reading
+  // Initialize patching param.
+  for(j=0;j<VDIF_NCHAN;j++)
+	for(p=0;p<4;p++)
+	  {
+		mean_det[j][p]=acc_det[j][p]/(double)fct;
+		rms_det[j][p]=sqrt(accsq_det[j][p]/fct-pow(mean_det[j][p],2.0));
+		fprintf(stderr,"Mean & rms det chan%i, pol%i: %lf %lf\n",j,p,mean_det[j][p],rms_det[j][p]);
+	  }
+  
+  // Open VDIF files and skip the first given length of data
   for(j=0;j<2;j++)
-	vdif[j]=fopen(vname[j],"rb");
+	{
+	  vdif[j]=fopen(vname[j],"rb");
+	  for(i=0;i<nf_skip;i++)
+		fseek(vdif[j],VDIF_HEADER_BYTES+fbytes,SEEK_CUR);
+	}
   
   // Calibrate the difference in starting time between the two pols
   printf("Calibrating potential difference in starting time between two pols...\n");
@@ -407,11 +422,14 @@ int main(int argc, char *argv[])
   strcpy(pf.hdr.poln_type, "LIN");
 
   // Specify status of output data
-  if(dstat=='C')
+  if( dstat == 'C' )
 	strcpy(pf.hdr.poln_order, "AABBCRCI");
+  else if ( dstat == 'S' )
+	strcpy(pf.hdr.poln_order, "IQUV");
+  else if ( dstat == 'P' )
+	strcpy(pf.hdr.poln_order, "AABB");
   else
 	strcpy(pf.hdr.poln_order, "AA+BB");
-
   strcpy(pf.hdr.track_mode, "TRACK");
   strcpy(pf.hdr.cal_mode, "OFF");
   strcpy(pf.hdr.feed_mode, "FA");
@@ -420,12 +438,8 @@ int main(int argc, char *argv[])
   pf.hdr.BW = VDIF_BW*bs;
   pf.hdr.nchan = VDIF_NCHAN;
   pf.hdr.MJD_epoch = mjd;
-  //pf.hdr.ra2000 = 302.0876876;
   strcpy(pf.hdr.ra_str,ra);
-  //dec2hms(pf.hdr.ra_str, pf.hdr.ra2000/15.0, 0);
-  //pf.hdr.dec2000 = -3.456987698;
   strcpy(pf.hdr.dec_str,dec);
-  //dec2hms(pf.hdr.dec_str, pf.hdr.dec2000, 1);
   pf.hdr.azimuth = 123.123;
   pf.hdr.zenith_ang = 23.0;
   pf.hdr.beam_FWHM = 0.25;
@@ -486,35 +500,21 @@ int main(int argc, char *argv[])
   
   pf.sub.rawdata = (unsigned char *)malloc(pf.sub.bytes_per_subint);
 
-  // Param. for power dip patching
-  if(pch == 1)
-	{
-	  pha_start_nf = lround(pha_start * (len_scan + len_dip) / (pf.hdr.dt/tsf) );
-	  len_scan_nf = len_scan / (pf.hdr.dt/tsf);
-	  len_dip_nf = len_dip / (pf.hdr.dt/tsf);
-	  for(i=0;i<2;i++)
-		for(j=0;j<VDIF_NCHAN;j++)
-		  {
-			mean_scan[i][j] = mean[i][j];
-			rms_scan[i][j] = rms[i][j];
-		  }
-	  pha_ct = pha_start_nf;
-	  printf("Patching power dip enabled.%ld %ld %ld %.10lf\n",pha_ct,len_scan_nf,len_dip_nf,pha_start);
-	}
+  // Initialize param. for patching
+  pha_start_nf = lround(pha_start * (len_scan + len_dip) / (pf.hdr.dt/tsf) );
+  len_scan_nf = len_scan / (pf.hdr.dt/tsf);
+  len_dip_nf = len_dip / (pf.hdr.dt/tsf);
+  pha_ct = pha_start_nf;
+  fct=0;
+  for(j=0;j<4;j++)
+	for(k=0;k<VDIF_NCHAN;k++)
+	  {
+		acc_det[k][j]=0.0;
+		accsq_det[k][j]=0.0;
+	  }
   
-  printf("Header prepared. Start to write data...\n");
+  fprintf(stderr,"Header prepared. Start to write data...\n");
 
-  for(k=0;k<VDIF_NCHAN;k++)
-	{
-	  for(p=0;p<2;p++)
-		{
-		  stat[p][k][0]=0;
-		  stat[p][k][1]=0;
-		  stat[p][k][2]=0;
-		  stat[p][k][3]=0;
-		}
-	}
-  
   // Main loop to write subints
   do
 	{
@@ -536,124 +536,116 @@ int main(int argc, char *argv[])
 			  header[0]=(const vdif_header *)vfhdr[0];
 			  header[1]=(const vdif_header *)vfhdr[1];
 				 
-			  //Valid frame
-			  if(!getVDIFFrameInvalid(header[0]) && !getVDIFFrameInvalid(header[1]))
+			  // Valid scan frame
+			  if(pha_ct < len_scan_nf && (!getVDIFFrameInvalid(header[0]) && !getVDIFFrameInvalid(header[1])))
 				{
-				  // No patching turned on or scan frame
-				  if(pch != 1 || pha_ct < len_scan_nf)
-					{
-					  // Read data in frame
-					  fread(buffer[0],1,fbytes,vdif[0]);
-					  fread(buffer[1],1,fbytes,vdif[1]);
+				  // Read data in frame
+				  fread(buffer[0],1,fbytes,vdif[0]);
+				  fread(buffer[1],1,fbytes,vdif[1]);
 
-					  // Get detection
-					  getVDIFFrameDetection_32chan(buffer[0],buffer[1],fbytes,det,dstat);
+				  // Get detection
+				  getVDIFFrameDetection_32chan(buffer[0],buffer[1],fbytes,det,dstat);
 
-					  /*--------- Update stat ------------*/
-					  if(pch == 1)
-						{
-						  // Expand to 8-bit
-						  convert2to8(obuffer[0], buffer[0],fbytes);
-						  convert2to8(obuffer[1], buffer[1],fbytes);
-
-						  // Accumulate values for each channel
-						  for(j=0;j<VDIF_NCHAN;j++)
-							{
-							  for(p=0;p<fbytes*4/VDIF_NCHAN;p++)
-								{
-								  if(j<VDIF_NCHAN/2)
-									dati=(int)obuffer[0][p*VDIF_NCHAN+15-j];
-								  else
-									dati=(int)obuffer[0][p*VDIF_NCHAN+15+VDIF_NCHAN-j];
-								  stat[0][j][dati]++;
-
-								  if(j<VDIF_NCHAN/2)
-									dati=(int)obuffer[1][p*VDIF_NCHAN+15-j];
-								  else
-									dati=(int)obuffer[1][p*VDIF_NCHAN+15+VDIF_NCHAN-j];
-								  stat[1][j][dati]++;
-								}
-							}
-						}
-					}
-				  // Patching on and entering dip phase
-				  else
-					{
-					  // Get threading when entering dip phase and reset stats
-					  if(pha_ct==len_scan_nf)
-						{
-						  for(p=0;p<2;p++)
-							{
-							  for(j=0;j<VDIF_NCHAN;j++)
-								{
-								  thrd0[p][j]=(double)stat[p][j][0]/(stat[p][j][0]+stat[p][j][1]+stat[p][j][2]+stat[p][j][3]);
-								  thrd1[p][j]=(double)(stat[p][j][0]+stat[p][j][1])/(stat[p][j][0]+stat[p][j][1]+stat[p][j][2]+stat[p][j][3]);
-								  thrd2[p][j]=(double)(stat[p][j][0]+stat[p][j][1]+stat[p][j][2])/(stat[p][j][0]+stat[p][j][1]+stat[p][j][2]+stat[p][j][3]);
-								  fprintf(stderr,"2-bit threads for pol%i, chan%i: %lf %lf %lf\n",p,j,thrd0[p][j],thrd1[p][j],thrd2[p][j]);
-								  stat[p][j][0]=0;
-								  stat[p][j][1]=0;
-								  stat[p][j][2]=0;
-								  stat[p][j][3]=0;
-								}
-							}
-						}
-						
-					  // Skip the frame
-					  fseek(vdif[0],fbytes,SEEK_CUR);
-					  fseek(vdif[1],fbytes,SEEK_CUR);
-
-					  // Create fake detection with scan mean and zero rms
-					  getVDIFFrameFakeDetection_32chan(det,seed,fbytes,dstat,thrd0,thrd1,thrd2);
-					  seed-=2;
-					}
+				  // Accumulate values for detection mean
+				  for(j=0;j<VDIF_NCHAN;j++)
+					for(p=0;p<4;p++)
+					  {
+						acc_det[j][p]+=(double)det[j][p];
+						accsq_det[j][p]+=pow((double)det[j][p],2.0);
+					  }
+				  fct++;
 				}
-			  // Invalide frame
+			  // Patching dip phase or invalid frame
 			  else
 				{
-				  // Skip the frame
+				  // Update patching param. when entering dip phase
+				  if(pha_ct == len_scan_nf)
+					{
+					  // Update detection mean
+					  for(j=0;j<VDIF_NCHAN;j++)
+						for(p=0;p<4;p++)
+						  {
+							// In case no values in the past cycle
+							if(acc_det[j][p]!=0.0)
+							  {
+								mean_det[j][p]=acc_det[j][p]/(double)fct;
+								rms_det[j][p]=sqrt(accsq_det[j][p]/(double)fct-pow(mean_det[j][p],2.0));
+							  }
+							acc_det[j][p]=0.0;
+							accsq_det[j][p]=0.0;
+						  }
+					  fct=0;
+					}
+
+				  // Fake detectin from mean for invaid frame
+				  if(getVDIFFrameInvalid(header[0]) || getVDIFFrameInvalid(header[1]))
+					{
+					  fprintf(stderr,"Invalid frame detected. Use measured mean & rms to generate fake detection.\n");
+					  for(j=0;j<VDIF_NCHAN;j++)
+						for(p=0;p<4;p++)
+						  det[j][p]=mean_det[j][p];
+					}
+
+				  // Patch fake detection from simulated raw samples
+				  if(pch == 1)
+					for(j=0;j<VDIF_NCHAN;j++)
+					  for(p=0;p<4;p++)
+						det[j][p]=mean_det[j][p]+rms_det[j][p]*gasdev(&seed);
+
+				  // Patch fake detection from mean
+				  if(mch == 1)
+					for(j=0;j<VDIF_NCHAN;j++)
+					  for(p=0;p<4;p++)
+						det[j][p]=mean_det[j][p];
+
+				  // Skip the data
 				  fseek(vdif[0],fbytes,SEEK_CUR);
 				  fseek(vdif[1],fbytes,SEEK_CUR);
-				  fprintf(stderr,"Invalid frame detected. Use measured mean & rms to generate fake detection.\n");				  
-				  // Create fake detection with measured mean and rms
-				  getVDIFFrameFakeDetection(mean,rms,VDIF_NCHAN,det,seed,fbytes,dstat);
-				  seed-=2;
 				}
 			
-			  // Accumulate value
+			  // Accumulate detection value
 			  for(j=0;j<VDIF_NCHAN;j++)
 				{
 				  for(p=0;p<npol;p++)
 					sdet[j][p]+=det[j][p];
 				}
 
-			  // Patch option on
-			  if(pch == 1)
-				{
-				  // Update counters
-				  pha_ct++;
+			  // Update phase counters
+			  pha_ct++;
 				  
-				  // Reset phase and counter
-				  if(pha_ct == (len_scan_nf + len_dip_nf))
-					pha_ct = 0;
-			  	}
-			  
+			  // Reset phase and counter
+			  if(pha_ct == (len_scan_nf + len_dip_nf))
+				{
+				  pha_ct = 0;
+
+				  // Start another sequence for ran
+				  iseed=iseed-2;
+				  seed=iseed;
+				}
+
 			  // Break at the end of vdif file
 			  if(feof (vdif[0]) || feof (vdif[1])) break;
-			}	  
+			}
+		
 		  // Break when not enough frames to get a sample
 		  if(k!=tsf) break;
 		  
 		  // Write detections in pf.sub.rawdata, in 32-bit float and FPT order (freq, pol, time)
 		  for(j=0;j<VDIF_NCHAN;j++)
 			{
-			  if(npol==4)
+			  if (npol == 4)
 				{
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*VDIF_NCHAN+sizeof(float)*j,&sdet[j][0],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*VDIF_NCHAN+sizeof(float)*VDIF_NCHAN*1+sizeof(float)*j,&sdet[j][1],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*VDIF_NCHAN+sizeof(float)*VDIF_NCHAN*2+sizeof(float)*j,&sdet[j][2],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*VDIF_NCHAN+sizeof(float)*VDIF_NCHAN*3+sizeof(float)*j,&sdet[j][3],sizeof(float));
 				}
-			  else if(npol==1)
+			  else if (npol == 2)
+				{
+                  memcpy(pf.sub.rawdata+i*sizeof(float)*2*VDIF_NCHAN+sizeof(float)*j,&sdet[j][0],sizeof(float));
+				  memcpy(pf.sub.rawdata+i*sizeof(float)*2*VDIF_NCHAN+sizeof(float)*VDIF_NCHAN*1+sizeof(float)*j,&sdet[j][1],sizeof(float));
+				}
+			  else if (npol == 1)
 				{
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*1*VDIF_NCHAN+sizeof(float)*j,&sdet[j][0],sizeof(float));
 				}

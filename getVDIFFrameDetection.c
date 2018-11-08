@@ -6,19 +6,31 @@
 
 void getDetection(float p0r, float p0i, float p1r, float p1i, float *det, char dstat)
 {
-  if(dstat=='C')
+  if (dstat == 'C')
 	{
 	  det[0]=p0r*p0r+p0i*p0i;
 	  det[1]=p1r*p1r+p1i*p1i;
 	  det[2]=p0r*p1r+p0i*p1i;
 	  det[3]=p0r*p1i-p0i*p1r;
 	}
-  else if(dstat=='I')
+  else if (dstat == 'I')
 	det[0]=p0r*p0r+p0i*p0i+p1r*p1r+p1i*p1i;
-  else if(dstat=='X')
+  else if (dstat == 'X')
 	det[0]=p0r*p0r+p0i*p0i;
-  else if(dstat=='Y')
+  else if (dstat == 'Y')
 	det[0]=p1r*p1r+p1i*p1i;
+  else if (dstat == 'S')
+	{
+      det[0]=(p0r*p0r+p0i*p0i)+(p1r*p1r+p1i*p1i);
+	  det[1]=(p0r*p0r+p0i*p0i)-(p1r*p1r+p1i*p1i);
+	  det[2]=2.0*(p0r*p1r+p0i*p1i);
+	  det[3]=2.0*(p0r*p1i-p0i*p1r);
+	}
+  else if (dstat == 'P')
+	{
+	  det[0]=sqrt(pow((p0r*p0r+p0i*p0i)-(p1r*p1r+p1i*p1i),2.0)+pow(2.0*(p0r*p1r+p0i*p1i),2.0));
+	  det[1]=2.0*(p0r*p1i-p0i*p1r);
+	}
 }
 
 // Get coherence detection from real 2-bit, 32-channel frame of two pols
@@ -31,8 +43,10 @@ void getVDIFFrameDetection_32chan(const unsigned char *src_p0, const unsigned ch
   unsigned char *buff8[2];
 
   // Decode dstat to get npol
-  if(dstat=='C')
+  if(dstat=='C' || dstat=='S')
 	npol=4;
+  else if(dstat=='P')
+	npol=2;
   else
 	npol=1;
 
@@ -118,7 +132,7 @@ void getVDIFFrameDetection_32chan(const unsigned char *src_p0, const unsigned ch
 
 
 // Generate fake detection with given mean and rms for a frame with 32 channels
-void getVDIFFrameFakeDetection_32chan(float det[][4], long int seed, int fbytes, char dstat, double thrd0[][32], double thrd1[][32], double thrd2[][32])
+void getVDIFFrameFakeDetection_32chan(double mean_scan[][32], double rms_scan[][32], float det[][4], long int *seed, int fbytes, char dstat)
 {
   fftwf_complex *out_p0,*out_p1;
   fftwf_plan pl0,pl1;
@@ -128,8 +142,10 @@ void getVDIFFrameFakeDetection_32chan(float det[][4], long int seed, int fbytes,
   Nchan=32;
   
   // Decode dstat to get npol
-  if(dstat=='C')
+  if(dstat=='C' || dstat=='S')
 	npol=4;
+  else if(dstat=='P')
+	npol=2;
   else
 	npol=1;
 
@@ -159,17 +175,7 @@ void getVDIFFrameFakeDetection_32chan(float det[][4], long int seed, int fbytes,
 		{
 		  //Generate time series with given mean & rms
 		  for(i=0;i<Nts;i++)
-			{
-			  rum=ran2(&seed);
-			  if(rum<=thrd0[j][k])
-				in[j][i]=0.0-1.5;
-			  else if(rum<=thrd1[j][k] && rum>thrd0[j][k])
-				in[j][i]=1.0-1.5;
-			  else if(rum<=thrd2[j][k] && rum>thrd1[j][k])
-			    in[j][i]=2.0-1.5;
-			  else
-				in[j][i]=3.0-1.5;
-			}
+			in[j][i]=mean_scan[j][k]-1.5;
 		}
 
       // Make FFT plan and execute
@@ -207,7 +213,7 @@ void getVDIFFrameFakeDetection_32chan(float det[][4], long int seed, int fbytes,
 }
 
 // Generate fake detection with given mean and rms for a frame with one channel
-void getVDIFFrameFakeDetection(double *mean, double *rms, int Nchan, float det[][4], long int seed, int fbytes, char dstat)
+void getVDIFFrameFakeDetection(double *mean, double *rms, int Nchan, float det[][4], long int *seed, int fbytes, char dstat)
 {
   fftwf_complex *out_p0,*out_p1;
   fftwf_plan pl0,pl1;
@@ -215,8 +221,10 @@ void getVDIFFrameFakeDetection(double *mean, double *rms, int Nchan, float det[]
   int i,j,k,Nts,npol;
 
   // Decode dstat to get npol
-  if(dstat=='C')
+  if(dstat=='C' || dstat=='S')
 	npol=4;
+  else if(dstat=='P')
+	npol=2;
   else
 	npol=1;
   
@@ -246,7 +254,7 @@ void getVDIFFrameFakeDetection(double *mean, double *rms, int Nchan, float det[]
 		{
 		  // Generate time series with given mean & rms
 		  for(i=0;i<Nts;i++)
-			  in[j][i]=mean[j]+gasdev(&seed)*rms[j]-1.5;
+			  in[j][i]=mean[j]+gasdev(seed)*rms[j]-1.5;
 		}
 	  
 	  // Perform FFT
