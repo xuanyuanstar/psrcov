@@ -10,6 +10,7 @@ int usage(char *prg_name)
   fprintf(stdout,
            "%s [options]\n"
 	   " -f   File name\n"
+	   " -n   Jname\n"
            " -R   RA in hr:min:sec\n"
            " -D   DEC in hr:min:sec\n"
  	   " -h   Available options\n",
@@ -20,7 +21,7 @@ int usage(char *prg_name)
 int main(int argc, char *argv[]) {
 
   int arg;
-  char filename[4096],ra[64],dec[64];
+  char filename[4096],ra[64],dec[64],jname[64];
 
   // Read arguments
   if(argc==1)
@@ -29,12 +30,16 @@ int main(int argc, char *argv[]) {
       exit(0);
     }
 
-  while((arg=getopt(argc,argv,"hf:R:D:")) != -1)
+  while((arg=getopt(argc,argv,"hf:n:R:D:")) != -1)
     {
       switch(arg)
         {
 	case 'f':
 	  strcpy(filename,optarg);
+	  break;
+
+	case 'n':
+	  strcpy(jname,optarg);
 	  break;
 
         case 'R':
@@ -63,6 +68,7 @@ int main(int argc, char *argv[]) {
 
     /* Set coordinates */
     fits_movabs_hdu(f, 1, NULL, &status);
+    fits_update_key(f, TSTRING, "SRC_NAME", jname, NULL, &status);
     fits_update_key(f, TSTRING, "RA", ra, NULL, &status);
     fits_update_key(f, TSTRING, "DEC", dec, NULL, &status);
     fits_update_key(f, TSTRING, "STT_CRD1", ra, NULL, &status);
