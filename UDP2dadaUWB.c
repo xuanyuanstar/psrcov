@@ -12,6 +12,7 @@
 #include <getopt.h>
 #include "date2mjd_ld.c"
 #include "ascii_header.c"
+#include <fftw.h>
 
 #define DADAHDR_SIZE 4096
 
@@ -25,7 +26,6 @@ void usage(char *prg_name)
 	   " --ye  Second pol1 file base\n"
 	   " -T    Starting UT in Yr-Mon-Dat-hr:min:sec (e.g., 2017-01-01-01:03:05)\n" 
            " -S    Dada header file\n"
-           " -L    Length of output in a single file (int, by default 1s)\n"
 	   " -f    Central frequency (MHz)\n"
 	   " -b    Bandwidth (MHz)\n"
 	   " -s    Band sense (-1 for lower, 1 for upper, by default 1)\n"
@@ -34,7 +34,11 @@ void usage(char *prg_name)
 	   " -R    RA (by default 00:00:00.00)\n"
 	   " -D    Dec (by default -00:00:00.00)\n"
            " -O    Route for output\n"
-	   " -h    Available options\n",
+	   " -h    Available options\n"
+	   "\n"
+	   " -c    Enable cutting option\n"
+	   " -l    Lower end to keep\n"
+	   " -u    Upper end to keep\n",
 	  prg_name);
   exit(0);
 }
@@ -42,11 +46,11 @@ void usage(char *prg_name)
 main(int argc, char *argv[])
 {
   FILE *bb[4],*dadahdr,*odada;
-  int arg,len,ibg,i,j,f,ied,ndim,fct,nblk,k,npol,ctblk,bs,ct;
+  int arg,len,ibg,i,j,f,ied,ndim,fct,nblk,k,npol,ctblk,bs,ct,optct,flowidx,fhighidx;
   char hdrbuff[DADAHDR_SIZE],oroute[1024],bbbase[4][1024],bbname[4][1024],dadaname[1024],hdrname[1024],ut[32],srcname[1024],dat,mjd[64],*dblk,*blkp0,*blkp1,ra[64],dec[64];
-  float freq,bw;
+  float freq,bw,flow,fhigh;
   double ts;
-  long nsamp,fsize,sampct,nblkout,UDPsize;
+  long fsize,sampct,nblkout,UDPsize;
   struct stat filestat;
   struct option longopts[]={
     {"xo", required_argument, NULL, 'W'},
@@ -56,6 +60,7 @@ main(int argc, char *argv[])
     {0, 0, 0, 0}
   };
 
+  optct=0;
   ct=0;
   bs=1;
   freq=-999.999;
@@ -69,6 +74,8 @@ main(int argc, char *argv[])
   nblk=4096;
   npol=2;
   ctblk=0;
+  flowidx=-1;
+  fhighidx=-1;
   //Size of one UDP file
   UDPsize=2147483648;
   // Number of unloaded blks from each UDP file to each dada file (close to 10s)
@@ -89,7 +96,7 @@ main(int argc, char *argv[])
       exit(0);
     }
 
-  while((arg=getopt_long(argc,argv,"hS:L:f:b:O:T:N:i:R:D:s:",longopts,NULL)) != -1)
+  while((arg=getopt_long(argc,argv,"hS:f:b:O:T:N:i:R:D:s:cl:u:",longopts,NULL)) != -1)
     {
       switch(arg)
 	{
@@ -111,10 +118,6 @@ main(int argc, char *argv[])
 
 	case 'S':
 	  strcpy(hdrname,optarg);
-	  break;
-
-	case 'L':
-	  len=atoi(optarg);
 	  break;
 
 	case 'f':
@@ -155,6 +158,18 @@ main(int argc, char *argv[])
 
 	case 's':
 	  bs=atoi(optarg);
+	  break;
+
+	case 'c':
+	  optct=1;
+	  break;
+
+	case 'l':
+	  flow=atof(optarg);
+	  break;
+
+	case 'u':
+	  fhigh=atof(optarg);
 	  break;
 
 	case 0:
@@ -200,22 +215,34 @@ main(int argc, char *argv[])
       fprintf(stderr,"Error: starting UT not given.\n");
       exit(0);
     }
+  if(optct == 1 && (flowidx<0 || fhighidx<0))
+    {
+      fprintf(stderr,"Error: cutting edge not given.\n");
+      exit(0);
+    }
+
+
+  // Get MJD from given date 
+  date2mjd_ld(ut,mjd);
+  printf("MJD: %s\n",mjd);
 
   // Sampling interval
   ts=1.0/(double)bw/2*ndim;
-
-  // Time sample per unload file
-  nsamp=(long)(bw*2/ndim*1000000)*len;
-  printf("Number of samples per unload file: %ld\n",nsamp);
-  
-  // Get MJD from given date
-  date2mjd_ld(ut,mjd);
-  printf("MJD: %s\n",mjd);
   
   // Size of an unload file
-  fsize=nsamp*ndim*2; // To be incorporated...
   fsize=4*nblk*nblkout;
   printf("File size: %ld\n",fsize);
+
+  // Re-calculate output parameters when cutting
+  if(optct == 1)
+    {
+
+
+
+
+    }
+
+
 
   // Read DADA header template
   dadahdr=fopen(hdrname,"rt");
@@ -235,7 +262,6 @@ main(int argc, char *argv[])
   ascii_header_set(hdrbuff,"FREQ","%f",freq);
   ascii_header_set(hdrbuff,"BW","%f",bw*bs);
   ascii_header_set(hdrbuff,"TSAMP","%.18lf",ts);
-  ascii_header_set(hdrbuff,"TSAMP","%.18lf",0.000555555630833333);
   ascii_header_set(hdrbuff,"MJD_START","%s",mjd);
 
   // Specified header values for the first file
@@ -295,6 +321,19 @@ main(int argc, char *argv[])
 	  }
 	fwrite(dblk,sizeof(char)*nblk*npol,1,odada);
 	sampct+=nblk;
+
+	// FFT 
+
+	// Select useful channels
+
+	// FFT back
+
+	// Get mean & rms
+
+	// Redigitize
+
+	// Write to dadafile
+
 	fread(blkp0,sizeof(char)*nblk,1,bb[1]);
 	fread(blkp1,sizeof(char)*nblk,1,bb[3]);
 	for(k=0;k<nblk;k++)
