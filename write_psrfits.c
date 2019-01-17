@@ -97,18 +97,18 @@ int psrfits_create(struct psrfits *pf) {
 #ifdef PSRFITS_TEMPLATE_DIR
     sprintf(template_dir, "%s", PSRFITS_TEMPLATE_DIR);
 #else
-    char *guppi_dir = getenv("GUPPI_DIR");
-    if (guppi_dir==NULL) {
+    char *psrfits_dir = getenv("PSRFITS_UTILS");
+    if (psrfits_dir==NULL) {
         fprintf(stderr, 
-                "Error: GUPPI_DIR environment variable not set, exiting.\n");
+                "Error: PSRFITS_UTILS environment variable not set, exiting.\n");
         exit(1);
     }
-    sprintf(template_dir, "%s/src", guppi_dir);
+    sprintf(template_dir, "%s/src", psrfits_dir);
 #endif
     printf("Opening file '%s' ", pf->filename);
     if (mode==search) { 
         printf("in search mode.\n");
-		if (hdr->nbits == 32) sprintf(template_file, "%s/%s", template_dir, PSRFITS_SEARCH32_TEMPLATE);
+	if (hdr->nbits == 32) sprintf(template_file, "%s/%s", template_dir, PSRFITS_SEARCH32_TEMPLATE);
         else sprintf(template_file, "%s/%s", template_dir, PSRFITS_SEARCH_TEMPLATE);
     } else if (mode==fold) { 
         printf("in fold mode.\n");
@@ -152,6 +152,7 @@ int psrfits_create(struct psrfits *pf) {
     }
     fits_update_key(pf->fptr, TSTRING, "FD_POLN", hdr->poln_type, NULL, status);
     fits_update_key(pf->fptr, TINT, "FD_HAND", &(hdr->fd_hand), NULL, status);
+    fits_update_key(pf->fptr, TINT, "IBEAM", &(hdr->ibeam), NULL, status);
     fits_update_key(pf->fptr, TDOUBLE, "FD_SANG", &(hdr->fd_sang), NULL, status);
     fits_update_key(pf->fptr, TDOUBLE, "FD_XYPH", &(hdr->fd_xyph), NULL, status);
     fits_update_key(pf->fptr, TINT, "BE_PHASE", &(hdr->be_phase), NULL, status);
