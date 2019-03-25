@@ -38,7 +38,7 @@ void usage(char *prg_name)
           "  -S      Name of the source (by default J0000+0000)\n"
 		  "  -r      RA of the source\n"
 		  "  -c      Dec of the source\n"
-		  "  -D      Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, S for Stokes, P for polarised signal, by default C)\n"
+		  "  -D      Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, S for Stokes, P for polarised signal, S for stokes, by default C)\n"
 		  "  -O      Route of the output file(s).\n"
 		  "  -h      Available options\n"
 		  "\n"
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
   struct psrfits pf;
   
   char vname[2][1024], oroute[1024], ut[30],mjd_str[25],vfhdr[2][VDIF_HEADER_BYTES],srcname[16],dstat,ra[64],dec[64];
-  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,p,nfps,fbytes,vd[2],nf_stat,ftot[2][2][VDIF_NCHAN],ct,tsf,bs,tet,nf_skip,dati,npol,pch,mean_sampl,mch;
+  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,p,nfps,fbytes,fnum,vd[2],nf_stat,ftot[2][2][VDIF_NCHAN],ct,tsf,bs,tet,nf_skip,dati,npol,pch,mean_sampl,sk,ftotct;
   float freq,s_stat,dat,s_skip;
   double spf,pha_start,len_scan,len_dip,mean_det[VDIF_NCHAN][4],acc_det[VDIF_NCHAN][4],rms_det[VDIF_NCHAN][4],accsq_det[VDIF_NCHAN][4];
   long double mjd;
@@ -78,11 +78,11 @@ int main(int argc, char *argv[])
   dstat='C';
   npol=4;
   pch=0;
-  mch=0;
   pha_start=0.0;
   len_scan=16.128;
   len_dip=2.064;
   mean_sampl=0;
+  ftotct=0;
 
   if(argc==1)
     {
@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
 		  break;
 
 		case 'M':
-		  mch=1;
+		  pch=2;
 		  break;
 		  
 		case 'p':
@@ -180,46 +180,34 @@ int main(int argc, char *argv[])
 	  fprintf(stderr,"Missing info of observing central frequency.\n");
 	  exit(0);
 	}
-  
   if(j_i==0)
 	{
 	  fprintf(stderr,"No input file provided for pol0.\n");
 	  exit(0);
 	}
-  
   if(j_j==0)
 	{
 	  fprintf(stderr,"No input file provided for pol1.\n");
 	  exit(0);
 	}
-
   if(tsf<1)
 	{
 	  fprintf(stderr,"Invalid sample scrunching factor.\n");
 	  exit(0);
 	}  
-  
   if(j_O==0)
 	{
 	  fprintf(stderr,"No output route specified.\n");
 	  exit(0);
 	}
-  
   if(bs!=-1 && bs!=1)
 	{
 	  fprintf(stderr,"Not readable band sense.\n");
 	  exit(0);
 	}
-
   if(dstat!='I' && dstat!='C' && dstat!='X' && dstat!='Y' && dstat!='S' && dstat!='P')
 	{
 	  fprintf(stderr,"Not recognized status for output data.\n");
-	  exit(0);
-	}
-  
-  if(mch==1 && pch==1)
-	{
-	  fprintf(stderr,"Incompatible patching options.\n");
 	  exit(0);
 	}
   
@@ -343,6 +331,7 @@ int main(int argc, char *argv[])
 	}  
   while(mon[0]!=mon[1])
 	{
+	  printf("Mon not same %i %i\n",mon[0],mon[1]);
 	  if(mon[0]<mon[1])
 		{
 		  fseek(vdif[0],fbytes,SEEK_CUR);
@@ -382,6 +371,7 @@ int main(int argc, char *argv[])
 	}
   while(num[0]!=num[1])
 	{
+	  printf("num not same\n");
 	  if(num[0]<num[1])
 		{
 		  fseek(vdif[0],fbytes,SEEK_CUR);
@@ -443,6 +433,7 @@ int main(int argc, char *argv[])
   pf.hdr.azimuth = 123.123;
   pf.hdr.zenith_ang = 23.0;
   pf.hdr.beam_FWHM = 0.25;
+  pf.hdr.ibeam = 0;
   pf.hdr.start_lst = 10000.0;
   pf.hdr.start_sec = 25000.82736876;
   pf.hdr.start_day = 55000;
@@ -535,9 +526,25 @@ int main(int argc, char *argv[])
 			  fread(vfhdr[1],1,VDIF_HEADER_BYTES,vdif[1]);
 			  header[0]=(const vdif_header *)vfhdr[0];
 			  header[1]=(const vdif_header *)vfhdr[1];
-				 
-			  // Valid scan frame
-			  if(pha_ct < len_scan_nf && (!getVDIFFrameInvalid(header[0]) && !getVDIFFrameInvalid(header[1])))
+			  ftotct++;
+			  
+			  // Check if a proper frame
+			  fbytes=getVDIFFrameBytes(header[0])-VDIF_HEADER_BYTES;
+			  num[0]=getVDIFFrameNumber(header[0]);
+			  num[1]=getVDIFFrameNumber(header[1]);
+			  if(fbytes < 32 || fbytes > 144512) {
+				printf("False number of framesize in pol0 at frame %i.\n",ftotct);
+				exit(0);
+			  }
+			  fbytes=getVDIFFrameBytes(header[1])-VDIF_HEADER_BYTES;
+			  if(fbytes < 32 || fbytes > 144512) {
+				printf("False number of framesize in pol1 at frame %i.\n",ftotct);
+				exit(0);
+			  }
+			  if(num[0] != num[1]) printf("Warning: frame number start to deviate.\n");
+			  
+			  // Valid frame
+			  if(!getVDIFFrameInvalid(header[0]) && !getVDIFFrameInvalid(header[1]))
 				{
 				  // Read data in frame
 				  fread(buffer[0],1,fbytes,vdif[0]);
@@ -546,57 +553,61 @@ int main(int argc, char *argv[])
 				  // Get detection
 				  getVDIFFrameDetection_32chan(buffer[0],buffer[1],fbytes,det,dstat);
 
-				  // Accumulate values for detection mean
-				  for(j=0;j<VDIF_NCHAN;j++)
-					for(p=0;p<4;p++)
-					  {
-						acc_det[j][p]+=(double)det[j][p];
-						accsq_det[j][p]+=pow((double)det[j][p],2.0);
-					  }
-				  fct++;
-				}
-			  // Patching dip phase or invalid frame
-			  else
-				{
-				  // Update patching param. when entering dip phase
-				  if(pha_ct == len_scan_nf)
-					{
-					  // Update detection mean
+				  // Subscan phase
+				  if(pha_ct < len_scan_nf)
+					{				  
+					  // Accumulate values for detection mean
 					  for(j=0;j<VDIF_NCHAN;j++)
 						for(p=0;p<4;p++)
 						  {
-							// In case no values in the past cycle
-							if(acc_det[j][p]!=0.0)
-							  {
-								mean_det[j][p]=acc_det[j][p]/(double)fct;
-								rms_det[j][p]=sqrt(accsq_det[j][p]/(double)fct-pow(mean_det[j][p],2.0));
-							  }
-							acc_det[j][p]=0.0;
-							accsq_det[j][p]=0.0;
+							acc_det[j][p]+=(double)det[j][p];
+							accsq_det[j][p]+=pow((double)det[j][p],2.0);
 						  }
-					  fct=0;
+					  fct++;
 					}
-
-				  // Fake detectin from mean for invaid frame
-				  if(getVDIFFrameInvalid(header[0]) || getVDIFFrameInvalid(header[1]))
+				  else // Dip phase
 					{
-					  fprintf(stderr,"Invalid frame detected. Use measured mean & rms to generate fake detection.\n");
-					  for(j=0;j<VDIF_NCHAN;j++)
-						for(p=0;p<4;p++)
-						  det[j][p]=mean_det[j][p];
+					  // Update patching param, when entering dip phase
+					  if(pha_ct == len_scan_nf)
+						{
+						  // Update detection mean
+						  for(j=0;j<VDIF_NCHAN;j++)
+							for(p=0;p<4;p++)
+							  {
+								// In case no values in the past cycle
+								if(acc_det[j][p]!=0.0)
+								  {
+									mean_det[j][p]=acc_det[j][p]/(double)fct;
+									rms_det[j][p]=sqrt(accsq_det[j][p]/(double)fct-pow(mean_det[j][p],2.0));
+								  }
+								acc_det[j][p]=0.0;
+								accsq_det[j][p]=0.0;
+							  }
+						  fct=0;
+						}
+                      // Patch detection with mean+rms
+					  if(pch == 1)
+						{
+						  for(j=0;j<VDIF_NCHAN;j++)
+							for(p=0;p<4;p++)
+							  det[j][p]=mean_det[j][p]+rms_det[j][p]*gasdev(&seed);
+						}
+					  else if(pch == 2)
+						{
+						  // Patch fake detection from mean
+						  for(j=0;j<VDIF_NCHAN;j++)
+							for(p=0;p<4;p++)
+							  det[j][p]=mean_det[j][p];
+						}
 					}
-
-				  // Patch fake detection from simulated raw samples
-				  if(pch == 1)
-					for(j=0;j<VDIF_NCHAN;j++)
-					  for(p=0;p<4;p++)
-						det[j][p]=mean_det[j][p]+rms_det[j][p]*gasdev(&seed);
-
-				  // Patch fake detection from mean
-				  if(mch == 1)
-					for(j=0;j<VDIF_NCHAN;j++)
-					  for(p=0;p<4;p++)
-						det[j][p]=mean_det[j][p];
+				}
+			  else // Invalid frame	  
+				{
+				  // Fake detection from mean
+				  fprintf(stderr,"Invalid frame detected. Use measured mean to generate fake detection.\n");
+				  for(j=0;j<VDIF_NCHAN;j++)
+					for(p=0;p<4;p++)
+					  det[j][p]=mean_det[j][p];
 
 				  // Skip the data
 				  fseek(vdif[0],fbytes,SEEK_CUR);
@@ -650,6 +661,8 @@ int main(int argc, char *argv[])
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*1*VDIF_NCHAN+sizeof(float)*j,&sdet[j][0],sizeof(float));
 				}
 			}
+		  // Break at the end of vdif file
+		  if(feof (vdif[0]) || feof (vdif[1])) break;
 		}
 
 	  // Break when subint is not complete
@@ -661,8 +674,8 @@ int main(int argc, char *argv[])
 	  // Write subint
 	  psrfits_write_subint(&pf);
 	  printf("Subint %i written.\n",pf.sub.tsubint);
-	  
-	} while(!feof (vdif[0]) && !feof (vdif[1]) && !pf.status && pf.T < pf.hdr.scanlen);
+	  if(feof(vdif[0]) || feof(vdif[1])) break;
+	} while(!feof(vdif[0]) && !feof(vdif[1]) && !pf.status && pf.T < pf.hdr.scanlen);
 	
   // Close the last file and cleanup
   fits_close_file(pf.fptr, &(pf.status));
