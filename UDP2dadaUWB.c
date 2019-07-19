@@ -236,13 +236,9 @@ main(int argc, char *argv[])
   // Re-calculate output parameters when cutting
   if(optct == 1)
     {
-
-
-
-
+      printf("This mode is not implemented yet.\n");
+      exit(0);
     }
-
-
 
   // Read DADA header template
   dadahdr=fopen(hdrname,"rt");
@@ -322,16 +318,12 @@ main(int argc, char *argv[])
 	fwrite(dblk,sizeof(char)*nblk*npol,1,odada);
 	sampct+=nblk;
 
+	// Not implemented below
 	// FFT 
-
 	// Select useful channels
-
 	// FFT back
-
 	// Get mean & rms
-
 	// Redigitize
-
 	// Write to dadafile
 
 	fread(blkp0,sizeof(char)*nblk,1,bb[1]);
