@@ -4,4 +4,4 @@
 
 ./configure
 
-make
+make & make install
