@@ -12,7 +12,6 @@
 #include <getopt.h>
 #include "date2mjd_ld.c"
 #include "ascii_header.c"
-#include <fftw.h>
 
 #define DADAHDR_SIZE 4096
 
