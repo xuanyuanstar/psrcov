@@ -368,10 +368,8 @@ int main(int argc, char *argv[])
   pf.hdr.BW = VDIF_BW;
   pf.hdr.nchan = nchan;
   pf.hdr.MJD_epoch = mjd;
-  pf.hdr.ra2000 = 302.0876876;
-  dec2hms(pf.hdr.ra_str, pf.hdr.ra2000/15.0, 0);
-  pf.hdr.dec2000 = -3.456987698;
-  dec2hms(pf.hdr.dec_str, pf.hdr.dec2000, 1);
+  strcpy(pf.hdr.ra_str,ra);
+  strcpy(pf.hdr.dec_str,dec);
   pf.hdr.azimuth = 123.123;
   pf.hdr.zenith_ang = 23.0;
   pf.hdr.beam_FWHM = 0.25;
@@ -478,7 +476,7 @@ int main(int argc, char *argv[])
 				  fprintf(stderr,"Invalid frame detected. Use measured mean & rms to generate fake detection.\n");
 
 				  //Create fake detection with measured mean and rms
-				  getVDIFFrameFakeDetection(mean,rms,nchan,det,seed,fbytes,dstat);
+				  getVDIFFrameFakeDetection_1chan(mean,rms,nchan,det,seed,fbytes,dstat);
 				}			  
 			  //Accumulate value
 			  for(j=0;j<nchan;j++)

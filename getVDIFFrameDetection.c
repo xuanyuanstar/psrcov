@@ -213,7 +213,7 @@ void getVDIFFrameFakeDetection_32chan(double mean_scan[][32], double rms_scan[][
 }
 
 // Generate fake detection with given mean and rms for a frame with one channel
-void getVDIFFrameFakeDetection(double *mean, double *rms, int Nchan, float det[][4], long int *seed, int fbytes, char dstat)
+void getVDIFFrameFakeDetection_1chan(double *mean, double *rms, int Nchan, float det[][4], long int *seed, int fbytes, char dstat)
 {
   fftwf_complex *out_p0,*out_p1;
   fftwf_plan pl0,pl1;

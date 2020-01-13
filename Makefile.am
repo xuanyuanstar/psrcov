@@ -25,6 +25,6 @@ UDP2dadaUWB_SOURCES = UDP2dadaUWB.c
 nuppi2dada_SOURCES = nuppi2dada.c
 nuppi2dada_LDADD = libVDIF.la
 
-AM_CPPFLAGS = -DPSRFITS_TEMPLATE_DIR='"/home/kliu/Soft/psrcov/"'
+AM_CPPFLAGS = -DPSRFITS_TEMPLATE_DIR='"/cluster/pulsar/kliu/Soft/psrcov"'
 
 ACLOCAL_AMFLAGS = -I config
