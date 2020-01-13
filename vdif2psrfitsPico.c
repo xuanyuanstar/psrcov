@@ -27,18 +27,21 @@ static int VDIF_NCHAN = 1; //Number of channels
 void usage(char *prg_name)
 {
   fprintf(stdout,
-		             "%s [options]\n"
-		             " -f   Observing central frequency (MHz)\n"
-            		 " -i   Input vdif pol0\n"
-		             " -j   Input vdif pol1\n"
-		             " -s   Seconds to get statistics to fill in invalid frames\n"
-		             " -t   Time sample scrunch factor (by default 1). One time sample 8 microsecond\n"
-		             " -S   Name of the source (by default J0835-4510)\n"
-		             " -D   Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, by default C)\n"
-		             " -n   Number of channels kept (by default 1, must be power of 2, up to 4096)\n"
-		             " -O   Route of the output file \n"
-		  " -h   Available options\n",
-		  prg_name);
+	  "%s [options]\n"
+	  " -f   Observing central frequency (MHz)\n"
+          " -i   Input vdif pol0\n"
+	  " -j   Input vdif pol1\n"
+	  " -b   Band sense (-1 for lower-side, 1 for upper-side, by default 1)\n"
+	  " -s   Seconds to get statistics to fill in invalid frames\n"
+	  " -t   Time sample scrunch factor (by default 1). One time sample 8 microsecond\n"
+	  " -S   Name of the source (by default J0835-4510)\n"
+          " -r   RA of the source (AA:BB:CC.DD)\n"
+          " -c   Dec of the source (+AA:BB:CC.DD)\n"
+	  " -D   Ouput data status (I for Stokes I, C for coherence product, X for pol0 I, Y for pol1 I, S for Stokes, P for polarised signal, S for stokes, by default C)\n"
+	  " -n   Number of channels kept (Power of 2 up to 4096, by default 1)\n"
+	  " -O   Route of the output file \n"
+	  " -h   Available options\n",
+	  prg_name);
   exit(0);
 }
 
@@ -49,8 +52,8 @@ int main(int argc, char *argv[])
   const vdif_header *header[2];
   struct psrfits pf;
   
-  char vname[2][1024],oroute[1024],ut[30],mjd_str[25],dat,vfhdr[2][VDIF_HEADER_BYTES],srcname[16],dstat;
-  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,nfps,fbytes,vd[2],nf_stat,ct,tsf,dati,nchan,npol;
+  char vname[2][1024],oroute[1024],ut[30],mjd_str[25],dat,vfhdr[2][VDIF_HEADER_BYTES],srcname[16],dstat,ra[64],dec[64];
+  int arg,j_i,j_j,j_O,n_f,mon[2],mon_nxt,i,j,k,nfps,fbytes,vd[2],nf_stat,ct,tsf,dati,nchan,npol,bs;
   float freq,s_stat,spf,fmean[2][2];
   long double mjd;
   long int idx[2],sec[2],num[2],seed;
@@ -64,65 +67,78 @@ int main(int argc, char *argv[])
   j_O=0;
   s_stat=0.0;
   tsf=1;
+  bs=1;
   strcpy(srcname,"J0835-4510");
   dstat='C';
   npol=4;
   nchan=1;
   
   //Read arguments
-  while ((arg=getopt(argc,argv,"hf:i:j:s:t:O:S:D:n:")) != -1)
+  while ((arg=getopt(argc,argv,"hf:i:j:b:s:t:O:S:D:n:r:c:")) != -1)
+    {
+      switch(arg)
 	{
-	  switch(arg)
-		{
-		case 'f':
-		  freq=atof(optarg);
-		  break;
+	case 'f':
+	  freq=atof(optarg);
+	  break;
 		  
-		case 'i':
-		  strcpy(vname[0],optarg);
-		  j_i=1;
-		  break;
+	case 'i':
+	  strcpy(vname[0],optarg);
+	  j_i=1;
+	  break;
 
-		case 'j':
-		  strcpy(vname[1],optarg);
-		  j_j=1;
-		  break;
+	case 'b':
+	  bs=atoi(optarg);
+	  break;
 
-		case 's':
-		  s_stat=atof(optarg);
-		  break;
+	case 'j':
+	  strcpy(vname[1],optarg);
+	  j_j=1;
+	  break;
+
+	case 's':
+	  s_stat=atof(optarg);
+	  break;
 		  
         case 't':
-		  tsf=atoi(optarg);
-		  break;
+	  tsf=atoi(optarg);
+	  break;
 
-		case 'S':
-		  strcpy(srcname,optarg);
-		  break;
+	case 'r':
+	  strcpy(ra,optarg);
+	  break;
+
+	case 'c':
+	  strcpy(dec,optarg);
+	  break;
+
+	case 'S':
+	  strcpy(srcname,optarg);
+	  break;
 		  
         case 'D':
-		  strcpy(&dstat,optarg);
-		  if(dstat!='C') npol=1;
-		  break;
+	  strcpy(&dstat,optarg);
+	  if(dstat!='C') npol=1;
+	  break;
 		  
-		case 'O':
-		  strcpy(oroute,optarg);
-		  j_O=1;
-		  break;
+	case 'O':
+	  strcpy(oroute,optarg);
+	  j_O=1;
+	  break;
 
-		case 'n':
-		  nchan=atoi(optarg);
-		  break;
+	case 'n':
+	  nchan=atoi(optarg);
+	  break;
 		  
-		case 'h':
-		  usage(argv[0]);
-		  return 0;
+	case 'h':
+	  usage(argv[0]);
+	  return 0;
 
-		default:
-		  usage(argv[0]);
-		  return 0;
-		}
+	default:
+	  usage(argv[0]);
+	  return 0;
 	}
+    }
   
   //Check if arguments are enough to procceed
   if(freq==0.0)
@@ -334,7 +350,15 @@ int main(int argc, char *argv[])
   strcpy(pf.hdr.source, srcname);
   strcpy(pf.hdr.date_obs, ut);
   strcpy(pf.hdr.poln_type, "LIN");
-  strcpy(pf.hdr.poln_order, "AABBCRCI");
+  // Specify status of output data
+  if( dstat == 'C' )
+    strcpy(pf.hdr.poln_order, "AABBCRCI");
+  else if ( dstat == 'S' )
+    strcpy(pf.hdr.poln_order, "IQUV");
+  else if ( dstat == 'P' )
+    strcpy(pf.hdr.poln_order, "AABB");
+  else
+    strcpy(pf.hdr.poln_order, "AA+BB");
   strcpy(pf.hdr.track_mode, "TRACK");
   strcpy(pf.hdr.cal_mode, "OFF");
   strcpy(pf.hdr.feed_mode, "FA");
@@ -351,6 +375,7 @@ int main(int argc, char *argv[])
   pf.hdr.azimuth = 123.123;
   pf.hdr.zenith_ang = 23.0;
   pf.hdr.beam_FWHM = 0.25;
+  pf.hdr.ibeam = 0;
   pf.hdr.start_lst = 10000.0;
   pf.hdr.start_sec = 25000.82736876;
   pf.hdr.start_day = 55000;
@@ -472,13 +497,18 @@ int main(int argc, char *argv[])
 		  //Write detections in pf.sub.rawdata, in 32-bit float and FPT order (freq, pol, time)
 		  for(j=0;j<nchan;j++)
 			{
-			  if(npol==4)
+			  if (npol == 4)
 				{
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*nchan+sizeof(float)*j,&sdet[j][0],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*nchan+sizeof(float)*nchan*1+sizeof(float)*j,&sdet[j][1],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*nchan+sizeof(float)*nchan*2+sizeof(float)*j,&sdet[j][2],sizeof(float));
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*4*nchan+sizeof(float)*nchan*3+sizeof(float)*j,&sdet[j][3],sizeof(float));
-				}		  
+				}
+			  else if (npol == 2)
+			    {
+			      memcpy(pf.sub.rawdata+i*sizeof(float)*2*nchan+sizeof(float)*j,&sdet[j][0],sizeof(float));
+			      memcpy(pf.sub.rawdata+i*sizeof(float)*2*nchan+sizeof(float)*nchan*1+sizeof(float)*j,&sdet[j][1],sizeof(float));
+			    }
 			  else if(npol==1)
 				{
 				  memcpy(pf.sub.rawdata+i*sizeof(float)*1*nchan+sizeof(float)*j,&sdet[j][0],sizeof(float));
