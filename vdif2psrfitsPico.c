@@ -473,7 +473,7 @@ int main(int argc, char *argv[])
 				  fseek(vdif[0],fbytes,SEEK_CUR);
 				  fseek(vdif[1],fbytes,SEEK_CUR);
 
-				  fprintf(stderr,"Invalid frame detected. Use measured mean & rms to generate fake detection.\n");
+				  fprintf(stderr,"Invalid frame detected. Use measured mean generate fake detection.\n");
 
 				  //Create fake detection with measured mean and rms
 				  getVDIFFrameFakeDetection_1chan(mean,rms,nchan,det,seed,fbytes,dstat);
