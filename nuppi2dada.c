@@ -113,7 +113,7 @@ main(int argc, char *argv[])
   int jd;
   fpos_t fileposi;
   long fileoffset;
-  char hdr_buffer[MAX_HEADER_SIZE],src_name[20],src_name_new[20],ra[15],dec[15],cmd[200],datafilename[200],filebasename[50],outname[50],ut[30],dadahdr[DADAHDR_SIZE],mjd_str[25],*block,*block_p1,*block_p2,buf,testhdr[6000];
+  char hdr_buffer[MAX_HEADER_SIZE],src_name[20],src_name_new[20],ra[15],dec[15],cmd[200],datafilename[200],filebasename[50],outname[50],ut[30],dadahdr[DADAHDR_SIZE],mjd_str[25],*block,*block_p1,*block_p2,buf;
   float freq,t_samp,freq_sub,bw;
   long double mjd,fmjd;
 
@@ -175,12 +175,7 @@ main(int argc, char *argv[])
   hgeti4(hdr_buffer, "OVERLAP", &overlap);
 
   //Get the packet index of the new block    
-  printf("%i\n",hgeti4(hdr_buffer, "PKTIDX", &pktidx));
-  strcpy(testhdr,hdr_buffer);
-  printf("%i\n",hgeti4(hdr_buffer, "PKTIDX", &pktidx));
-  printf("%i\n",pktidx);
-
-  exit(0);
+  hgeti4(hdr_buffer, "PKTIDX", &pktidx);
 
   //Number of packets within a block, not overlapped
   obyte_chan=overlap*n_pol*n_bit/8;
