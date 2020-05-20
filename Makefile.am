@@ -7,10 +7,10 @@ libVDIF_la_SOURCES = dec2hms.c downsample.c polyco.c vdifio.c write_psrfits.c cv
 libVDIF_la_LIBADD = @CFITSIO_LIBS@ @FFTW_LIBS@ 
 
 vdif2psrfitsPico_SOURCES = vdif2psrfitsPico.c
-vdif2psrfitsPico_LDADD = libVDIF.la @CFITSIO_LIBS@ @FFTW_LIBS@
+vdif2psrfitsPico_LDADD = libVDIF.la @CFITSIO_LIBS@ @FFTW_LIBS@ -lfftw3f_threads 
 
 vdif2psrfitsALMA_SOURCES = vdif2psrfitsALMA.c
-vdif2psrfitsALMA_LDADD = libVDIF.la @CFITSIO_LIBS@ @FFTW_LIBS@ 
+vdif2psrfitsALMA_LDADD = libVDIF.la @CFITSIO_LIBS@ @FFTW_LIBS@ -lfftw3f_threads
 
 UDP2psrfits_SOURCES = UDP2psrfits.c
 UDP2psrfits_LDADD = libVDIF.la @CFITSIO_LIBS@ @FFTW_LIBS@
