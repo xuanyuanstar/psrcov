@@ -20,7 +20,7 @@ int usage(char *prg_name)
 
 int main(int argc, char *argv[]) {
 
-  int arg;
+  int arg,ibeam;
   char filename[4096],ra[64],dec[64],jname[64];
 
   // Read arguments
@@ -64,6 +64,7 @@ int main(int argc, char *argv[]) {
 
     /* open fits file */
     status=0;
+	ibeam=0;
     fits_open_file(&f, filename, READWRITE, &status);
 
     /* Set coordinates */
@@ -75,7 +76,8 @@ int main(int argc, char *argv[]) {
     fits_update_key(f, TSTRING, "STP_CRD1", ra, NULL, &status);
     fits_update_key(f, TSTRING, "STT_CRD2", dec, NULL, &status);
     fits_update_key(f, TSTRING, "STP_CRD2", dec, NULL, &status);
-        
+	fits_update_key(f, TINT, "IBEAM", &ibeam, NULL, &status);
+	
     /* write it out */
     fits_close_file(f, &status);
 
