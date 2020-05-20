@@ -14,7 +14,7 @@
 #include <string.h>
 #include <assert.h>
 #include "hget.c"
-#include "mjd2date.h"
+#include "mjd2date.c"
 #include "ascii_header.c"
 
 //Convert 2-bit string to 8-bit, taken from vdif2to8

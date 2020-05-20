@@ -16,7 +16,7 @@
 #include <assert.h>
 #include <time.h>
 #include "hget.c"
-#include "mjd2date.h"
+#include "mjd2date.c"
 #include "ascii_header.c"
 #include "cvrt2to8.c"
 #include "ran.c"
