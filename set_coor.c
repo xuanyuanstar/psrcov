@@ -11,6 +11,7 @@ int usage(char *prg_name)
            "%s [options]\n"
 	   " -f   File name\n"
 	   " -n   Jname\n"
+	   " -t   Telescope name \n"
            " -R   RA in hr:min:sec\n"
            " -D   DEC in hr:min:sec\n"
  	   " -h   Available options\n",
@@ -20,9 +21,12 @@ int usage(char *prg_name)
 
 int main(int argc, char *argv[]) {
 
-  int arg,ibeam;
-  char filename[4096],ra[64],dec[64],jname[64];
-
+  int arg,ibeam,nphC;
+  char filename[4096],ra[64],dec[64],jname[64],tel[64];
+  float freq;
+  
+  nphC=0;
+  
   // Read arguments
   if(argc==1)
     {
@@ -30,7 +34,7 @@ int main(int argc, char *argv[]) {
       exit(0);
     }
 
-  while((arg=getopt(argc,argv,"hf:n:R:D:")) != -1)
+  while((arg=getopt(argc,argv,"hf:n:R:D:F:t:")) != -1)
     {
       switch(arg)
         {
@@ -50,6 +54,13 @@ int main(int argc, char *argv[]) {
           strcpy(dec,optarg);
           break;
 
+	case 'F':
+	  freq=atof(optarg);
+	  break;
+
+	case 't':
+	  strcpy(tel,optarg);
+	  
 	case 0:
           break;
 
@@ -64,10 +75,10 @@ int main(int argc, char *argv[]) {
 
     /* open fits file */
     status=0;
-	ibeam=0;
+    ibeam=0;
     fits_open_file(&f, filename, READWRITE, &status);
 
-    /* Set coordinates */
+    /* Set header params*/
     fits_movabs_hdu(f, 1, NULL, &status);
     fits_update_key(f, TSTRING, "SRC_NAME", jname, NULL, &status);
     fits_update_key(f, TSTRING, "RA", ra, NULL, &status);
@@ -76,7 +87,9 @@ int main(int argc, char *argv[]) {
     fits_update_key(f, TSTRING, "STP_CRD1", ra, NULL, &status);
     fits_update_key(f, TSTRING, "STT_CRD2", dec, NULL, &status);
     fits_update_key(f, TSTRING, "STP_CRD2", dec, NULL, &status);
-	fits_update_key(f, TINT, "IBEAM", &ibeam, NULL, &status);
+    fits_update_key(f, TSTRING, "TELESCOP", tel, NULL, &status);
+    fits_update_key(f, TINT, "IBEAM", &ibeam, NULL, &status);
+    fits_update_key(f, TFLOAT, "OBSFREQ", &freq, NULL, &status);
 	
     /* write it out */
     fits_close_file(f, &status);
