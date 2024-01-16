@@ -4,6 +4,7 @@
 //Configured as 8 x 64 MHz, sampled in 8 bit, real sample, dual polarisation;
 //A complete sample is 8 x 4 x 8 = 256 bit, in inverse order of frequency: ch7_l ch7_r ch6_l ch6_r ....
 
+#define VDIF_HEADER_BYTES       32
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -12,75 +13,56 @@
 #include <string.h>
 #include <assert.h>
 #include "hget.c"
-#include "mjd2date.c"
 #include "ascii_header.c"
+#include <time.h>
+#include <malloc.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "vdifio.h"
+#include "vdif2psrfits.h"
+#include "dec2hms.h"
 
-//Convert 2-bit string to 8-bit, taken from vdif2to8
-//Arguments are output, input, number of bytes in input
-static void convert2to8(unsigned char *dest, const unsigned char *src, int bytes)
+static uint32_t VDIF_BW = 512; //Bandwidth in MHz
+
+int64_t getVDIFFrameOffset(const vdif_header *headerst, const vdif_header *header, uint32_t fps)
 {
-  /* choose levels such that the ratio of high to low is as close to 3.3359                     
-   * as possible to best maintain amplitude scaling.  127.5 is the center of                    
-   * the scale (equates to 0).  118.5/35.5 is pretty close to optimal.                          
-   */
-  const unsigned char levels[4] = {9, 92, 163, 246};
-  static int first = 1;
-  static unsigned char lut2to8[256][4];   /* mapping from input 8 bits (4 samples) to output 4 8-bit samples */
-  int i, o;
+  uint32_t day[2],sec[2],num[2];
+  int64_t offset;
 
-  if(first)
-	{
-	  /* assemble look up table */
+  // Get epoch
+  day[0]=getVDIFFrameMJD(headerst);
+  day[1]=getVDIFFrameMJD(header);
 
-	  for(i = 0; i < 256; ++i)
-		{
-		  int j;
+  // Get second after epoch
+  sec[0]=getVDIFFrameSecond(headerst);
+  sec[1]=getVDIFFrameSecond(header);
 
-		  for(j = 0; j < 4; ++j)
-			{
-			  int k;
+  // Get number of frame after second
+  num[0]=getVDIFFrameNumber(headerst);
+  num[1]=getVDIFFrameNumber(header);
 
-			  k = (i >> (2*j)) & 0x3;
-			  lut2to8[i][j] = levels[k];
-			}
-		}
-	}
+  offset=(day[1]-day[0])*86400*fps+(sec[1]-sec[0])*fps+(num[1]-num[0]);
 
-  o = 0;
-  for(i = 0; i < bytes; ++i)
-	{
-	  dest[o++] = lut2to8[src[i]][0];
-	  dest[o++] = lut2to8[src[i]][1];
-	  dest[o++] = lut2to8[src[i]][2];
-	  dest[o++] = lut2to8[src[i]][3];
-	}
+  return offset;
 }
 
-//Calculate MJD from number of 6-mon counts and seconds
-long double get_mjd(int mon, long sec)
+int getVDIFFrameInvalid_robust(const vdif_header *header, int framebytes, bool ifverbose)
 {
-  int imjd,yr,mjd_ref;
-  long double fmjd;
-  
-  //Reference MJD of 2000-01-01 UTC
-  mjd_ref=51544;
-  
-  //Number of whole years
-  yr=floor(mon/2);
-
-  //Add days from whole years
-  imjd=mjd_ref+yr*365+floor((yr+3)/4);
-
-  //Add days from the left part of 6-mon count
-  imjd+=(mon-yr*2)*(31+28+31+30+31+30);
-  if(mon-yr*2==1 && floor(yr/4)*4==yr) imjd++;
-
-  //Add days from seconds
-  imjd+=floor(sec/86400);
-
-  fmjd=(sec-floor(sec/86400)*86400)/86400;
-
-  return((long double)imjd+fmjd);
+  int f, mjd,sec,num,inval;
+  f=getVDIFFrameBytes(header);
+  mjd=getVDIFFrameMJD(header);
+  sec=getVDIFFrameSecond(header);
+  num=getVDIFFrameNumber(header);
+  inval=getVDIFFrameInvalid(header);
+ 
+  if(f != framebytes || inval || mjd < 50000 || mjd > 60000 || sec < 0 || num < 0 || num > 125000)
+    {
+      if (ifverbose)
+	fprintf(stderr,"Invalid frame: bytes %i mjd %i sec %i num %i inval %i\n",f,mjd,sec,num,inval);
+      return 1;
+    }
+  else
+    return 0;
 }
 
 int usage(char *prg_name)
@@ -94,7 +76,6 @@ int usage(char *prg_name)
 		             " -r   VDIF frame header in Byte (by default 32)\n"
             		     " -i   Input vdif file\n"
 		             " -n   Index of frequency channel to extract\n"
-		             " -p   Header table\n"
 		             " -D   DADA file header size (by default 4096)\n"
 		             " -B   Bytes for one dada file (by default 2560000000)\n"
 		             " -S   Sample data header file\n"
@@ -115,17 +96,18 @@ main(int argc, char *argv[])
   long B_out = 2560000000;
 
   //Default bytes of a frame (without header)
-  int len=8192;
+  int fbytes = 8192;
 
   //Default bytes of a frame header
   int fhdr=32;
   
-  char ifile[200], oroute[200], hdrfile[200],phdrfile[200],dadahdr[DADAHDR_SIZE],ut[30],mjd_str[25],filename[200],dat;
-  unsigned char *inbuffer, *outbuffer;
-  int arg,j_i,j_O,j_S,j_p,n_f,n_cs,mon,ctoffset,i,j,k,t,ifreq,nfchan,B_cs,mon_nxt,n_f_s, bs, npol, ndim;
+  char ifile[200], oroute[200], hdrfile[200], dadahdr[DADAHDR_SIZE],ut[30],mjd_str[25],filename[200],dat, vfhdr[VDIF_HEADER_BYTES], vfhdrst[VDIF_HEADER_BYTES];
+  unsigned char *outbuffer;
+  int arg,j_i,j_O,j_S,j_p,n_f,n_cs,mon,ctoffset,i,j,k,t,ifreq,nfchan,B_cs,mon_nxt,n_f_s, bs, npol, ndim, offset, offset_pre;
   float bw, freq;
   long double mjd;
   long int idx,sec,num,offset0,sec_nxt,num_nxt;
+  int fps;
   
   j_i=0;
   j_O=0;
@@ -142,9 +124,10 @@ main(int argc, char *argv[])
   npol = 2;
   ndim = 1;
   B_cs = ndim * npol * nfchan;
+  fbytes = 8192;
   
   //Read arguments
-  while ((arg=getopt(argc,argv,"hf:l:r:i:n:p:D:B:S:O:")) != -1)
+  while ((arg=getopt(argc,argv,"hf:l:r:i:n:D:B:S:O:")) != -1)
 	{
 	  switch(arg)
 		{
@@ -153,7 +136,7 @@ main(int argc, char *argv[])
 		  break;
 
 		case 'l':
-		 len=atoi(optarg);
+		 fbytes=atoi(optarg);
 		  break;
 
 		case 'r':
@@ -167,11 +150,6 @@ main(int argc, char *argv[])
 		  
 		case 'n':
 		  ifreq=atoi(optarg);
-		  break;
-
-		case 'p':
-		  strcpy(phdrfile,optarg);
-		  j_p=1;
 		  break;
 		  
 		case 'D':
@@ -241,21 +219,22 @@ main(int argc, char *argv[])
 
   //Number of frames per second data in vdif
   //bw x 2 (real sampled) x nfchan x 2 (pols) x 1 byte
-  n_f_s = bw * 1000000 * 2 * nfchan * 2 / len;
+  n_f_s = bw * 1000000 * 2 * nfchan * 2 / fbytes;
   printf("Number of frames per second data: %i.\n",n_f_s);
   
   //Number of frames to read to fill a dada file
-  n_f = B_out / (len / nfchan);
+  n_f = B_out / (fbytes / nfchan);
   printf("Number of frames to read to fill a dada file: %i.\n",n_f);
 
   //Number of complete time samples in a frame
-  n_cs = len / B_cs;
+  n_cs = fbytes / B_cs;
+
+  // Number of frames per second
+  fps=1000000 * 2 * VDIF_BW * npol / fbytes;
   
   //Allocate memo for one frame
-  inbuffer=malloc(sizeof(unsigned char)*len);
-  outbuffer=malloc(sizeof(unsigned char)*len);
-  memset(inbuffer,0,len);
-  memset(outbuffer,0,len);
+  outbuffer=malloc(sizeof(unsigned char)*fbytes);
+  memset(outbuffer,0,fbytes);
   
   //Read sample dada header
   memset(dadahdr,0,DADAHDR_SIZE);
@@ -263,29 +242,33 @@ main(int argc, char *argv[])
   fread(dadahdr,1,DADAHDR_SIZE,hdr);
   fclose(hdr);
 
-  //Read headers file to get time
-  phdr=fopen(phdrfile,"rt");
-  fscanf(phdr,"%ld %i %ld %ld",&idx,&mon,&sec,&num);
+  //Open files
+  invdif=fopen(ifile,"rb");
 
-  mon_nxt=mon;
-  sec_nxt=sec;
-  num_nxt=num;
+  // Move to the first valid frame
+  while (true)
+    {
+      fread(vfhdr, 1, VDIF_HEADER_BYTES, invdif);
+      if(!getVDIFFrameInvalid_robust((const vdif_header *)vfhdr, VDIF_HEADER_BYTES+fbytes, false))
+	break;
+      printf("Invalid frame. Move to the next.\n");
+      fseek(invdif, fbytes, SEEK_CUR);
+    }
+
+  // Get MJD and UT from the first valid frame header
+  mjd = getVDIFFrameDMJD((const vdif_header *)vfhdr, fps);
+  sprintf(mjd_str,"%.16Lf",mjd);
+  mjd2date(mjd, ut);
+  printf("UT of start: %s\n",ut);
+  memcpy(vfhdrst,vfhdr,VDIF_HEADER_BYTES);
+  offset_pre = -1;
+  fseek(invdif, -VDIF_HEADER_BYTES, SEEK_CUR);
 
   //Offset in bytes at the beginning
   offset0=2*bw*1000000*2/n_f_s*num;
   printf("Offset at the beginning in bytes: %ld.\n",offset0);
   
-  //Get MJD
-  mjd=get_mjd(mon,sec);
-
-  //Convert MJD to UT
-  mjd2date(mjd,ut);
-  printf("UT of start: %s\n",ut);
-
-  //write accurate starting time into a string
-  sprintf(mjd_str,"%.16Lf",mjd);
-  
-  //Update header
+  //Update dada header
   ascii_header_set(dadahdr,"FILE_SIZE","%ld",B_out);
   ascii_header_set(dadahdr,"UTC_START","%s",ut);
   ascii_header_set(dadahdr,"MJD_START","%s",mjd_str);
@@ -295,81 +278,74 @@ main(int argc, char *argv[])
   ascii_header_set(dadahdr,"NPOL","%i",npol);
   ascii_header_set(dadahdr,"BW","%f",bw*bs);
   
-  //Open files
-  invdif=fopen(ifile,"rb");
-
   //Main loop
-  while(feof(phdr)!=1)
+  while(feof(invdif) != 1)
+    {
+      // Set filename and byte offset
+      sprintf(filename,"%s_%.01f_%016ld.000000.dada",ut,freq,offset0+B_out*ctoffset);
+      ascii_header_set(dadahdr,"FILE_NAME","%s",filename);
+      ascii_header_set(dadahdr,"OBS_OFFSET","%ld",offset0+B_out*ctoffset);
+
+      // Open output dada file
+      sprintf(filename,"%s/%s_%.01f_%016ld.000000.dada",oroute,ut,freq,offset0+B_out*ctoffset);
+      dada=fopen(filename,"wb");
+      if(dada==NULL)
 	{
-	  //Set filename and byte offset
-	  sprintf(filename,"%s_%.01f_%016ld.000000.dada",ut,freq,offset0+B_out*ctoffset);
-	  ascii_header_set(dadahdr,"FILE_NAME","%s",filename);
-	  ascii_header_set(dadahdr,"OBS_OFFSET","%ld",offset0+B_out*ctoffset);
-
-	  //Open output dada file
-	  sprintf(filename,"%s/%s_%.01f_%016ld.000000.dada",oroute,ut,freq,offset0+B_out*ctoffset);
-	  dada=fopen(filename,"wb");
-	  if(dada==NULL)
-		{
-		  printf("Could not generate output file.\n");
-		  exit(1);
-		}
-	  //Write header
-	  fwrite(dadahdr,1,DADAHDR_SIZE,dada);
-
-	  //Loop over frames to write content
-	  for(i=0;i<n_f;i++)
-		{
-		  //If the available frame matches the time
-		  if(mon==mon_nxt && num==num_nxt && sec==sec_nxt)
-			{
-			  //Move to the right frame and read the data
-			  fseek(invdif,(len+fhdr)*idx+fhdr,SEEK_SET);
-			  fread(inbuffer,1,len,invdif);
-			  memcpy(outbuffer, inbuffer, len);
-
-			  //Get info of the next available frame
-			  fscanf(phdr,"%ld %i %ld %ld",&idx,&mon,&sec,&num);
-			}
-		  //Fill zeros
-		  else
-			{
-			  printf("Miss available frame for sec %ld and index %ld. Fill zeros.\n",sec_nxt,num_nxt);
-			  memset(outbuffer, 0, len);
-			}
-		
-		  //If the end of table file, break
-		  if(feof(phdr)==1) break;
-
-		  //Write data
-		  for(k=0;k<n_cs;k++)
-			{
-			  for(j=0; j<npol*ndim; j++)
-			    {
-			      dat = outbuffer[k * B_cs + npol * ndim * ifreq + j];
-			      fwrite(&dat,1,1,dada);
-			    }
-			}
-
-		  //Count the next frame to read
-		  num_nxt++;
-		  if(num_nxt==n_f_s)
-			{
-			  num_nxt=0;
-			  sec_nxt++;
-			}
-		}
-
-	  //Close output
-	  fclose(dada);
-	  ctoffset++;
-	  printf("%s created.\n",filename);
+	  printf("Could not generate output file.\n");
+	  exit(1);
 	}
+      // Write dada header
+      fwrite(dadahdr,1,DADAHDR_SIZE,dada);
+
+      // Loop over VDIF frames to write content
+      for(i=0;i<n_f;i++)
+	{
+	  // Find the next valid frame
+	  while (true)
+	    {
+	      fread(vfhdr, 1, VDIF_HEADER_BYTES, invdif);
+	      if(!getVDIFFrameInvalid_robust((const vdif_header *)vfhdr, VDIF_HEADER_BYTES+fbytes, false))
+		break;
+	      printf("Invalid frame. Move to the next.\n");
+	      fseek(invdif, fbytes, SEEK_CUR);
+	    }
+
+	  // Get frame offset                                                                                                                                
+	  offset = getVDIFFrameOffset((const vdif_header *)vfhdrst, (const vdif_header *)vfhdr, fps);
+
+	  // Gap from the last frames, fill in data buffer with zeros
+	  if(offset > offset_pre + 1)
+	    {
+	      printf("Miss available frame. Fill zeros.\n");
+	      memset(outbuffer, 0, fbytes);
+	      fseek(invdif,  VDIF_HEADER_BYTES, SEEK_CUR);
+	      offset_pre++;
+	    }
+	  // Consecutive
+	  else
+	    fread(outbuffer, 1, fbytes, invdif);
+
+	  // Write data
+	  for(k=0;k<n_cs;k++)
+	    {
+	      for(j=0; j<npol*ndim; j++)
+		{
+		  dat = outbuffer[k * B_cs + npol * ndim * ifreq + j];
+		  fwrite(&dat,1,1,dada);
+		}
+	    }
+	  if(feof(invdif) == 1)
+	    break;
+	}
+
+      // Close output
+      fclose(dada);
+      ctoffset++;
+      printf("%s created.\n",filename);
+    }
   
   //Close and clean up
   fclose(invdif);
-  fclose(phdr);
-  free(inbuffer);
   free(outbuffer);
 }
 
