@@ -319,11 +319,12 @@ main(int argc, char *argv[])
 	      printf("Miss available frame. Fill zeros.\n");
 	      memset(outbuffer, 0, fbytes);
 	      fseek(invdif,  VDIF_HEADER_BYTES, SEEK_CUR);
-	      offset_pre++;
 	    }
 	  // Consecutive
 	  else
 	    fread(outbuffer, 1, fbytes, invdif);
+
+	  offset_pre++;
 
 	  // Write data
 	  for(k=0;k<n_cs;k++)
