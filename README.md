@@ -2,6 +2,6 @@
 # To compile, run:
 ./bootstrap
 
-./configure
+./configure --prefix=install_root
 
 make & make install
